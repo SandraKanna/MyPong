@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "feat/**"
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  ci-ready:
+    name: CI ready
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: CI ready
+        run: echo "CI ready"

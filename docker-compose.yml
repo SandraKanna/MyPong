@@ -1,0 +1,177 @@
+name: mypong
+
+# Dockerfiles for all custom services are pending (added per phase).
+# Running "make up" will fail until at least Fase 1 Dockerfiles exist.
+
+services:
+
+  # ── Public edge ──────────────────────────────────────────────────────────────
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d:ro
+      - avatars_data:/var/www/avatars:ro
+    networks:
+      - frontend-net
+    depends_on:
+      - gateway-api
+      - gateway-ws
+    # TODO: healthcheck
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    networks:
+      - frontend-net
+    # Dev only — in production nginx serves the static build directly
+
+  # ── Gateways (bridge frontend-net ↔ backend-net) ─────────────────────────────
+
+  gateway-api:
+    build:
+      context: ./services/gateway-api
+    expose:
+      - "4000"
+    environment:
+      PORT: "4000"
+      JWT_SECRET: ${JWT_SECRET}
+      AUTH_SERVICE_URL: http://auth-service:4001
+      USER_SERVICE_URL: http://user-service:4002
+    networks:
+      - frontend-net
+      - backend-net
+    depends_on:
+      - auth-service
+      - user-service
+    # TODO: healthcheck
+
+  gateway-ws:
+    build:
+      context: ./services/gateway-ws
+    expose:
+      - "4500"
+    environment:
+      PORT: "4500"
+      JWT_SECRET: ${JWT_SECRET}
+    networks:
+      - frontend-net
+      - backend-net
+    # TODO: healthcheck
+
+  # ── Backend services (backend-net only) ──────────────────────────────────────
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+    expose:
+      - "4001"
+    environment:
+      PORT: "4001"
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+    networks:
+      - backend-net
+    depends_on:
+      - postgres
+    # TODO: healthcheck
+
+  user-service:
+    build:
+      context: ./services/user-service
+    expose:
+      - "4002"
+    environment:
+      PORT: "4002"
+      DATABASE_URL: ${DATABASE_URL}
+    volumes:
+      - avatars_data:/var/www/avatars
+    networks:
+      - backend-net
+    depends_on:
+      - postgres
+    # TODO: healthcheck
+
+  game-service:
+    build:
+      context: ./services/game-service
+    environment:
+      GATEWAY_WS_URL: ws://gateway-ws:4500
+    networks:
+      - backend-net
+    depends_on:
+      - gateway-ws
+    # TODO: healthcheck
+
+  matchmaking-service:
+    build:
+      context: ./services/matchmaking-service
+    environment:
+      GATEWAY_WS_URL: ws://gateway-ws:4500
+      DATABASE_URL: ${DATABASE_URL}
+    networks:
+      - backend-net
+    depends_on:
+      - gateway-ws
+      - postgres
+    # TODO: healthcheck
+
+  tournament-service:
+    build:
+      context: ./services/tournament-service
+    environment:
+      GATEWAY_WS_URL: ws://gateway-ws:4500
+      DATABASE_URL: ${DATABASE_URL}
+    networks:
+      - backend-net
+    depends_on:
+      - gateway-ws
+      - postgres
+    # TODO: healthcheck
+
+  ia-bot-service:
+    build:
+      context: ./services/ia-bot-service
+    environment:
+      GATEWAY_WS_URL: ws://gateway-ws:4500
+    networks:
+      - backend-net
+    depends_on:
+      - gateway-ws
+    # TODO: healthcheck
+
+  # ── Data ─────────────────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend-net
+    # TODO: healthcheck
+
+# ── Networks ───────────────────────────────────────────────────────────────────
+
+networks:
+  frontend-net:
+    driver: bridge
+  backend-net:
+    driver: bridge
+
+# ── Volumes ────────────────────────────────────────────────────────────────────
+
+volumes:
+  postgres_data:
+  avatars_data:

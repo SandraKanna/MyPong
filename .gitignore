@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment variables — never commit secrets
+.env
+.env.*
+*.env
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Docker
+.docker/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Misc
+.cache/
+tmp/
+temp/
