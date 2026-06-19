@@ -55,9 +55,9 @@ services:
     build:
       context: ./services/gateway-ws
     expose:
-      - "4500"
+      - "4500" # NETWORK
     environment:
-      PORT: "4500"
+      PORT: "4500" # CONFIG for Node
       JWT_SECRET: ${JWT_SECRET}
     networks:
       - frontend-net
@@ -68,7 +68,8 @@ services:
 
   auth-service:
     build:
-      context: ./services/auth-service
+      context: .
+      dockerfile: services/auth-service/Dockerfile
     expose:
       - "4001"
     environment:
@@ -79,8 +80,14 @@ services:
     networks:
       - backend-net
     depends_on:
-      - postgres
-    # TODO: healthcheck
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   user-service:
     build:
@@ -160,7 +167,12 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - backend-net
-    # TODO: healthcheck
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 # ── Networks ───────────────────────────────────────────────────────────────────
 
