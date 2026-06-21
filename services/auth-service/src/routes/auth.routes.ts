@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { FastifyPluginAsync } from 'fastify';
 import * as authService from '../services/auth.service';
 import {
@@ -7,6 +8,21 @@ import {
   logoutSchema,
 } from '../schemas/auth.schemas';
 
+// Actual runtime shape of z.treeifyError — Zod 4.4.3 types don't reflect this.
+interface ZodTreeNode {
+  errors: string[];
+  properties?: Record<string, ZodTreeNode>;
+}
+
+// Adapts z.treeifyError (Zod v4) to the flat { field: string[] } shape
+// that clients receive, so the API contract stays stable as Zod evolves.
+function fieldErrors(error: z.ZodError): Record<string, string[]> {
+  const tree = z.treeifyError(error) as unknown as ZodTreeNode;
+  return Object.fromEntries(
+    Object.entries(tree.properties ?? {}).map(([k, v]) => [k, v.errors ?? []])
+  );
+}
+
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
@@ -14,7 +30,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/register', async (request, reply) => {
     const result = registerSchema.safeParse(request.body);
     if (!result.success) {
-      return reply.status(400).send({ error: 'Invalid input', details: result.error.flatten().fieldErrors });
+      return reply.status(400).send({ error: 'Invalid input', details: fieldErrors(result.error) });
     }
 
     const { email, password } = result.data;
@@ -34,7 +50,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/login', async (request, reply) => {
     const result = loginSchema.safeParse(request.body);
     if (!result.success) {
-      return reply.status(400).send({ error: 'Invalid input', details: result.error.flatten().fieldErrors });
+      return reply.status(400).send({ error: 'Invalid input', details: fieldErrors(result.error) });
     }
 
     const { email, password } = result.data;
@@ -56,7 +72,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/refresh', async (request, reply) => {
     const result = refreshSchema.safeParse(request.body);
     if (!result.success) {
-      return reply.status(400).send({ error: 'Invalid input', details: result.error.flatten().fieldErrors });
+      return reply.status(400).send({ error: 'Invalid input', details: fieldErrors(result.error) });
     }
 
     let payload: { userId: number; jti: string };
@@ -85,7 +101,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete('/session', async (request, reply) => {
     const result = logoutSchema.safeParse(request.body);
     if (!result.success) {
-      return reply.status(400).send({ error: 'Invalid input', details: result.error.flatten().fieldErrors });
+      return reply.status(400).send({ error: 'Invalid input', details: fieldErrors(result.error) });
     }
 
     let jti: string;
