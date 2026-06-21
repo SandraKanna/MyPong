@@ -9,8 +9,8 @@
     "migrate:up": "node-pg-migrate up",
     "migrate:down": "node-pg-migrate down",
     "migrate:create": "node-pg-migrate create",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "NODE_ENV=test vitest run",
+    "test:watch": "NODE_ENV=test vitest"
   },
   "node-pg-migrate": {
     "migrationsTable": "pgmigrations",
