@@ -8,13 +8,85 @@ on:
     branches:
       - main
 
-jobs:
-  ci-ready:
-    name: CI ready
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+# ── auth-service ──────────────────────────────────────────────────────────────
+# Jobs run sequentially: lint → typecheck → test → docker-build.
+# Each failure stops the chain so later jobs don't waste CI minutes.
+# When more services are added, their jobs will run in parallel with these.
 
-      - name: CI ready
-        run: echo "CI ready"
+jobs:
+  lint:
+    name: Lint (auth-service)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/auth-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: services/auth-service/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+  typecheck:
+    name: Typecheck (auth-service)
+    runs-on: ubuntu-latest
+    needs: lint
+    defaults:
+      run:
+        working-directory: services/auth-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: services/auth-service/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+  test:
+    name: Test (auth-service)
+    runs-on: ubuntu-latest
+    needs: typecheck
+    defaults:
+      run:
+        working-directory: services/auth-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: services/auth-service/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+  docker-build:
+    name: Docker Build (auth-service)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build auth-service image
+        run: docker build -f services/auth-service/Dockerfile -t mypong-auth-service:ci .
