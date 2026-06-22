@@ -2,8 +2,11 @@ name: CI
 
 on:
   push:
-    branches:
-      - "**"
+    paths:
+      - "services/**"
+      - "docker-compose.yml"
+      - "Makefile"
+      - ".github/workflows/ci.yml"
   pull_request:
     branches:
       - main
