@@ -36,7 +36,6 @@ COPY --from=builder /app/services/auth-service/dist ./dist
 COPY --from=builder /app/services/auth-service/node_modules ./node_modules
 COPY services/auth-service/package.json ./
 COPY services/auth-service/migrations/ ./migrations/
-
 # Run as non-root (node user is built into node:alpine)
 USER node
 

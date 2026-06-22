@@ -71,7 +71,11 @@ services:
       context: .
       dockerfile: services/auth-service/Dockerfile
     expose:
-      - "4001" # to be used by other containers that need to connect to it (e.g. gateway-api)
+      - "4001" # reachable by other containers on backend-net (e.g. gateway-api)
+    # TODO: remove ports when gateway-api is implemented (PR 2) — gateway-api
+    # will proxy /api/auth/* to this service and become the only entry point.
+    ports:
+      - "4001:4001"
     environment:
       PORT: "4001"
       DATABASE_URL: ${DATABASE_URL}
@@ -83,7 +87,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4001/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4001/health"]
       interval: 10s
       timeout: 5s
       retries: 5
