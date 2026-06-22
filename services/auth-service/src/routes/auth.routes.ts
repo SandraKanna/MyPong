@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { FastifyPluginAsync } from 'fastify';
+import { FastifyPluginCallback } from 'fastify';
 import * as authService from '../services/auth.service';
 import {
   registerSchema,
@@ -25,7 +25,7 @@ function fieldErrors(error: z.ZodError): Record<string, string[]> {
 
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-export const authRoutes: FastifyPluginAsync = async (fastify) => {
+export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   fastify.post('/register', async (request, reply) => {
     const result = registerSchema.safeParse(request.body);
@@ -117,4 +117,5 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.status(204).send();
   });
 
+  done();
 };

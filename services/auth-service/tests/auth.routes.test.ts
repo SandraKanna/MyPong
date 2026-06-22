@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import type { QueryResult } from 'pg';
 
 // Mocks are hoisted before imports by Vitest — order here matters.
 
@@ -51,8 +52,8 @@ function makeTokenRow(jti: string, revoked = false) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function rows<T>(data: T[]) {
-  return { rows: data, rowCount: data.length } as any;
+function rows<T>(data: T[]): QueryResult<T> {
+  return { rows: data, rowCount: data.length, command: '', oid: 0, fields: [] };
 }
 
 // ── Suite ─────────────────────────────────────────────────────────────────────
