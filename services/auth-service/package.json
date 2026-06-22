@@ -1,0 +1,39 @@
+{
+  "name": "@mypong/auth-service",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "lint": "eslint src tests",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "migrate:up": "node-pg-migrate up",
+    "migrate:down": "node-pg-migrate down",
+    "migrate:create": "node-pg-migrate create",
+    "test": "NODE_ENV=test vitest run",
+    "test:watch": "NODE_ENV=test vitest"
+  },
+  "node-pg-migrate": {
+    "migrationsTable": "pgmigrations",
+    "dir": "migrations"
+  },
+  "dependencies": {
+    "argon2": "^0.44.0",
+    "fastify": "^5.8.5",
+    "jsonwebtoken": "^9.0.3",
+    "node-pg-migrate": "^8.0.4",
+    "pg": "^8.22.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^26.0.0",
+    "@types/pg": "^8.20.0",
+    "eslint": "^10.5.0",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.1",
+    "vitest": "^4.1.9"
+  }
+}
