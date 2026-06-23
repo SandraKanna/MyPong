@@ -50,13 +50,13 @@ export function generateRefreshToken(userId: number): { token: string; jti: stri
 }
 
 export function verifyAccessToken(token: string): { userId: number } {
-  const payload = jwt.verify(token, config.JWT_SECRET) as { sub: string; type: string };
+  const payload = jwt.verify(token, config.JWT_SECRET, { algorithms: ['HS256'] }) as { sub: string; type: string };
   if (payload.type !== 'access') throw new Error('Invalid token type');
   return { userId: Number(payload.sub) };
 }
 
 export function verifyRefreshToken(token: string): { userId: number; jti: string } {
-  const payload = jwt.verify(token, config.JWT_REFRESH_SECRET) as {
+  const payload = jwt.verify(token, config.JWT_REFRESH_SECRET, { algorithms: ['HS256'] }) as {
     sub: string;
     jti: string;
     type: string;
