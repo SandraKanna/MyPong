@@ -1,4 +1,5 @@
 import { FastifyPluginCallback } from 'fastify';
+import fp from 'fastify-plugin';
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 
@@ -13,13 +14,17 @@ const PUBLIC_ROUTES: ReadonlyArray<string> = [
   '/api/auth/register',
   '/api/auth/login',
   '/api/auth/refresh',
+  '/api/auth/session', // logout — access token may be expired; auth-service validates refresh token
 ];
 
-export const authPlugin: FastifyPluginCallback = (fastify, _opts, done) => {
+const plugin: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.decorateRequest('userId', null);
 
   fastify.addHook('preHandler', (request, reply, next) => {
-    if (PUBLIC_ROUTES.includes(request.routeOptions.url ?? '')) {
+    // request.routeOptions.url is the route template (e.g. /api/auth/*), not the
+    // actual request path — compare against request.url (strip query string first).
+    const urlPath = request.url.split('?')[0];
+    if (PUBLIC_ROUTES.includes(urlPath)) {
       next();
       return;
     }
@@ -48,3 +53,7 @@ export const authPlugin: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
+
+// fp() makes the hook escape plugin encapsulation — it registers at the parent
+// scope so it applies to all routes (including siblings like authProxyRoutes).
+export const authPlugin = fp(plugin);

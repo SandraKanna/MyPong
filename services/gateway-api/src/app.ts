@@ -1,11 +1,16 @@
-import Fastify, { FastifyInstance } from 'fastify';
+import Fastify, { FastifyInstance, FastifyServerOptions } from 'fastify';
 import { authPlugin } from './plugins/auth.plugin.js';
 import { authProxyRoutes } from './routes/auth.proxy.js';
 
-export async function buildApp(): Promise<FastifyInstance> {
-  const fastify = Fastify({ logger: process.env.NODE_ENV !== 'test' });
+interface BuildAppOptions {
+  logger?: FastifyServerOptions['logger'];
+}
 
-  fastify.get('/health', async () => {
+export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
+  const { logger = process.env.NODE_ENV !== 'test' } = opts;
+  const fastify = Fastify({ logger });
+
+  fastify.get('/health', () => {
     return { status: 'ok' };
   });
 
