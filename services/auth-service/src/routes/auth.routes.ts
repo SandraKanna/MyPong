@@ -4,7 +4,6 @@ import * as authService from '../services/auth.service';
 import {
   registerSchema,
   loginSchema,
-  logoutSchema,
 } from '../schemas/auth.schemas';
 
 // Actual runtime shape of z.treeifyError — Zod 4.4.3 types don't reflect this.
@@ -112,21 +111,24 @@ export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
 
   fastify.delete('/session', async (request, reply) => {
-    const result = logoutSchema.safeParse(request.body);
-    if (!result.success) {
-      return reply.status(400).send({ error: 'Invalid input', details: fieldErrors(result.error) });
+    const token = request.cookies.refreshToken;
+    if (!token) {
+      reply.clearCookie('refreshToken', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/api/auth' });
+      return reply.status(204).send();
     }
 
     let jti: string;
     try {
-      ({ jti } = authService.verifyRefreshToken(result.data.refreshToken));
+      ({ jti } = authService.verifyRefreshToken(token));
     } catch {
       // Token already expired or invalid — it can't be used anyway, treat as logged out
+      reply.clearCookie('refreshToken', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/api/auth' });
       return reply.status(204).send();
     }
 
     // Outside the catch: DB errors propagate and Fastify returns 500
     await authService.revokeRefreshToken(jti);
+    reply.clearCookie('refreshToken', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/api/auth' });
     return reply.status(204).send();
   });
 
