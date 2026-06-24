@@ -129,6 +129,105 @@ describe('authProxyRoutes', () => {
     expect(res.json()).toEqual(upstreamBody);
   });
 
+  // ── Cookie relay ───────────────────────────────────────────────────────────
+
+  it('forwards Cookie header from client to upstream', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('{"accessToken":"tok"}', { status: 200 }));
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/refresh',
+      cookies: { refreshToken: 'some.refresh.token' },
+    });
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>).cookie).toContain('refreshToken=some.refresh.token');
+  });
+
+  it('does not forward cookie header when client sends none', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('{"userId":1}', { status: 201 }));
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'x@x.com', password: 'password123' },
+    });
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>).cookie).toBeUndefined();
+  });
+
+  it('propagates a single Set-Cookie from upstream to the client', async () => {
+    const upstreamHeaders = new Headers();
+    upstreamHeaders.append('set-cookie', 'refreshToken=newtoken; HttpOnly; Path=/api/auth; SameSite=Strict');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('{"accessToken":"tok"}', { status: 200, headers: upstreamHeaders }),
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'x@x.com', password: 'password123' },
+    });
+
+    const cookie = res.cookies.find(c => c.name === 'refreshToken');
+    expect(cookie).toBeDefined();
+    expect(cookie!.value).toBe('newtoken');
+  });
+
+  it('propagates multiple Set-Cookie from upstream as separate cookies (not collapsed)', async () => {
+    const upstreamHeaders = new Headers();
+    upstreamHeaders.append('set-cookie', 'refreshToken=newtoken; HttpOnly; Path=/api/auth');
+    upstreamHeaders.append('set-cookie', 'secondCookie=abc; Path=/');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('{"accessToken":"tok"}', { status: 200, headers: upstreamHeaders }),
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'x@x.com', password: 'password123' },
+    });
+
+    expect(res.cookies).toHaveLength(2);
+    expect(res.cookies.find(c => c.name === 'refreshToken')).toBeDefined();
+    expect(res.cookies.find(c => c.name === 'secondCookie')).toBeDefined();
+  });
+
+  it('does not send content-type to upstream when request has no body', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await app.inject({
+      method: 'DELETE',
+      url: '/api/auth/session',
+      cookies: { refreshToken: 'some.refresh.token' },
+    });
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['content-type']).toBeUndefined();
+  });
+
+  it('sends content-type: application/json to upstream when request has a body', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('{"userId":1}', { status: 201 }));
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'x@x.com', password: 'password123' },
+    });
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['content-type']).toBe('application/json');
+  });
+
   // ── Upstream failure → 502 ──────────────────────────────────────────────────
 
   it('returns 502 with generic body and logs service/url/error when fetch throws', async () => {
