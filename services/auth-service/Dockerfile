@@ -1,7 +1,7 @@
 # Build context: repo root (needed to access tsconfig.base.json)
 
 # ── Builder ───────────────────────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 
 # Mirror repo structure so "extends: ../../tsconfig.base.json" resolves correctly
 WORKDIR /app/services/auth-service
@@ -25,7 +25,7 @@ RUN npm run build
 RUN npm ci --omit=dev
 
 # ── Runner ────────────────────────────────────────────────────────────────────
-FROM node:22-alpine AS runner
+FROM node:24-alpine AS runner
 
 # Flat structure — no TypeScript, no monorepo paths needed
 WORKDIR /app

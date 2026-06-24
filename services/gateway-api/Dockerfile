@@ -1,7 +1,7 @@
 # Build context: repo root (needed to access tsconfig.base.json)
 
 # ── Builder ───────────────────────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app/services/gateway-api
 
@@ -16,7 +16,7 @@ RUN npm run build
 RUN npm ci --omit=dev
 
 # ── Runner ────────────────────────────────────────────────────────────────────
-FROM node:22-alpine AS runner
+FROM node:24-alpine AS runner
 
 WORKDIR /app
 
