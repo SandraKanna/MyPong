@@ -11,7 +11,8 @@ export const authProxyRoutes: FastifyPluginCallback = (fastify, _opts, done) => 
       upstreamResponse = await fetch(upstreamUrl, {
         method: request.method,
         headers: {
-          'content-type': 'application/json',
+          ...(request.body != null ? { 'content-type': 'application/json' } : {}),
+          ...(request.headers.cookie ? { cookie: request.headers.cookie } : {}),
         },
         body: request.body != null ? JSON.stringify(request.body) : undefined,
       });
@@ -24,10 +25,11 @@ export const authProxyRoutes: FastifyPluginCallback = (fastify, _opts, done) => 
     }
 
     const text = await upstreamResponse.text();
-    return reply
-      .code(upstreamResponse.status)
-      .header('content-type', 'application/json')
-      .send(text);
+    reply.header('content-type', 'application/json');
+    for (const cookie of upstreamResponse.headers.getSetCookie()) {
+      reply.header('set-cookie', cookie);
+    }
+    return reply.code(upstreamResponse.status).send(text);
   });
 
   done();
