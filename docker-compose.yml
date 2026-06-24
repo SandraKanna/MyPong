@@ -51,9 +51,15 @@ services:
       - frontend-net
       - backend-net
     depends_on:
-      - auth-service
+      auth-service:
+        condition: service_healthy
       # - user-service #no Dockerfile yet
-    # TODO: healthcheck
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   gateway-ws:
     build:
