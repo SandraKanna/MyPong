@@ -35,9 +35,13 @@ services:
 
   gateway-api:
     build:
-      context: ./services/gateway-api
+      context: .
+      dockerfile: services/gateway-api/Dockerfile
     expose:
       - "4000"
+    # TODO: remove this ports mapping once nginx is implemented
+    ports:
+      - "4010:4000"
     environment:
       PORT: "4000"
       JWT_SECRET: ${JWT_SECRET}
@@ -48,12 +52,13 @@ services:
       - backend-net
     depends_on:
       - auth-service
-      - user-service
+      # - user-service #no Dockerfile yet
     # TODO: healthcheck
 
   gateway-ws:
     build:
-      context: ./services/gateway-ws
+      context: .
+      dockerfile: services/gateway-ws/Dockerfile
     expose:
       - "4500" # NETWORK
     environment:
@@ -72,8 +77,9 @@ services:
       dockerfile: services/auth-service/Dockerfile
     expose:
       - "4001" # reachable by other containers on backend-net (e.g. gateway-api)
-    # TODO: remove ports when gateway-api is implemented (PR 2) — gateway-api
-    # will proxy /api/auth/* to this service and become the only entry point.
+    # TODO: remove this ports mapping once gateway-api is in make up and acts
+    # as the sole entry point for /api/auth/*. Direct access to :4001 is only
+    # needed while gateway-api runs natively (not yet in the compose stack).
     ports:
       - "4001:4001"
     environment:
@@ -95,7 +101,8 @@ services:
 
   user-service:
     build:
-      context: ./services/user-service
+      context: .
+      dockerfile: services/user-service/Dockerfile
     expose:
       - "4002"
     environment:
@@ -111,7 +118,8 @@ services:
 
   game-service:
     build:
-      context: ./services/game-service
+      context: .
+      dockerfile: services/game-service/Dockerfile
     environment:
       GATEWAY_WS_URL: ws://gateway-ws:4500
     networks:
@@ -122,7 +130,8 @@ services:
 
   matchmaking-service:
     build:
-      context: ./services/matchmaking-service
+      context: .
+      dockerfile: services/matchmaking-service/Dockerfile
     environment:
       GATEWAY_WS_URL: ws://gateway-ws:4500
       DATABASE_URL: ${DATABASE_URL}
@@ -135,7 +144,8 @@ services:
 
   tournament-service:
     build:
-      context: ./services/tournament-service
+      context: .
+      dockerfile: services/tournament-service/Dockerfile
     environment:
       GATEWAY_WS_URL: ws://gateway-ws:4500
       DATABASE_URL: ${DATABASE_URL}
@@ -148,7 +158,8 @@ services:
 
   ia-bot-service:
     build:
-      context: ./services/ia-bot-service
+      context: .
+      dockerfile: services/ia-bot-service/Dockerfile
     environment:
       GATEWAY_WS_URL: ws://gateway-ws:4500
     networks:
