@@ -28,7 +28,17 @@ Everything else (WebSocket hub, game engine, matchmaking, tournaments, AI, front
 - Make
 - Node.js 22 (only needed for the native dev setup in each service's README)
 
-`make up` starts the full implemented stack: `postgres`, `auth-service`, and
+Before running `make up` for the first time, create the root `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Fill in `JWT_SECRET`, `JWT_REFRESH_SECRET`, and `POSTGRES_PASSWORD` — then update
+`DATABASE_URL` to use that same password (it appears twice in the file; the
+comment in `.env.example` explains why).
+
+`make up` then starts the full implemented stack: `postgres`, `auth-service`, and
 `gateway-api`. See each service's README for endpoint-level testing.
 
 ---
