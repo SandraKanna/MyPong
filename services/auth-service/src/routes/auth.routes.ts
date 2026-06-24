@@ -4,7 +4,6 @@ import * as authService from '../services/auth.service';
 import {
   registerSchema,
   loginSchema,
-  refreshSchema,
   logoutSchema,
 } from '../schemas/auth.schemas';
 
@@ -77,14 +76,14 @@ export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
 
   fastify.post('/refresh', async (request, reply) => {
-    const result = refreshSchema.safeParse(request.body);
-    if (!result.success) {
-      return reply.status(400).send({ error: 'Invalid input', details: fieldErrors(result.error) });
+    const token = request.cookies.refreshToken;
+    if (!token) {
+      return reply.status(401).send({ error: 'Missing refresh token' });
     }
 
     let payload: { userId: number; jti: string };
     try {
-      payload = authService.verifyRefreshToken(result.data.refreshToken);
+      payload = authService.verifyRefreshToken(token);
     } catch {
       return reply.status(401).send({ error: 'Invalid or expired refresh token' });
     }
@@ -101,7 +100,14 @@ export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     const { token: refreshToken, jti: newJti } = authService.generateRefreshToken(payload.userId);
     await authService.saveRefreshToken(payload.userId, newJti, new Date(Date.now() + REFRESH_TOKEN_TTL_MS));
 
-    return reply.send({ accessToken, refreshToken });
+    reply.setCookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/api/auth',
+      maxAge: 7 * 24 * 60 * 60,
+    });
+    return reply.send({ accessToken });
   });
 
 
