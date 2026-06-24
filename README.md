@@ -26,7 +26,7 @@ Everything else (WebSocket hub, game engine, matchmaking, tournaments, AI, front
 
 - Docker and Docker Compose
 - Make
-- Node.js 22 (only needed for the native dev setup in each service's README)
+- Node.js 24 (only needed for the native dev setup in each service's README)
 
 Before running `make up` for the first time, create the root `.env`:
 
@@ -83,7 +83,7 @@ must be green before merge.
 | Layer     |                      Technology                          
 |-----------|-------------------------------------------------------------
 | Frontend  | React 18 + TypeScript + Vite + Zustand + React Router
-| Backend   | Node.js 22 + Fastify + TypeScript (strict, compiled) 
+| Backend   | Node.js 24 + Fastify + TypeScript (strict, compiled) 
 | Auth      | JWT (access 15 min + refresh 7 days) + argon2        
 | Database  | PostgreSQL 16 + node-pg-migrate
 | Proxy     | nginx (TLS + reverse proxy + static files + avatar serving)
