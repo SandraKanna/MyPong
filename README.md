@@ -8,14 +8,17 @@ A real-time multiplayer Pong game: 1v1 online, matchmaking, tournaments, and AI 
 
 ## What is implemented today
 
-**Phase 1 / PR 1 — auth-service** (complete)
+**Phase 1 / PR 1 — auth-service** (complete)  
+**Phase 1 / PR 2 — gateway-api** (complete)
 
-- `POST /register` — create account with email + password (argon2 hash)
-- `POST /login` — returns access token (15 min) + refresh token (7 days)
-- `POST /refresh` — rotates refresh token, returns new pair
-- `DELETE /session` — revokes refresh token (logout)
+- `POST /api/auth/register` — create account with email + password (argon2 hash)
+- `POST /api/auth/login` — returns access token (15 min) + refresh token (7 days)
+- `POST /api/auth/refresh` — rotates refresh token, returns new pair
+- `DELETE /api/auth/session` — revokes refresh token (logout)
+- All `/api/auth/*` routes are proxied through gateway-api, which validates JWT
+  access tokens for protected routes
 
-Everything else (gateway-api, WebSocket hub, game engine, matchmaking, tournaments, AI, frontend) is under construction.
+Everything else (WebSocket hub, game engine, matchmaking, tournaments, AI, frontend) is under construction.
 
 ---
 
@@ -23,55 +26,31 @@ Everything else (gateway-api, WebSocket hub, game engine, matchmaking, tournamen
 
 - Docker and Docker Compose
 - Make
-- Node.js 22 (only needed for the native dev setup below)
+- Node.js 22 (only needed for the native dev setup in each service's README)
+
+`make up` starts the full implemented stack: `postgres`, `auth-service`, and
+`gateway-api`. See each service's README for endpoint-level testing.
 
 ---
 
-## How to run
+## Running a service locally
 
-There are **two independent ways** to run auth-service locally. They use separate Postgres instances and both bind to port 4001 — don't run them at the same time.
+Each service has its own README with the full setup (Docker + native) and smoke test:
 
-### Option A — Full Docker Compose stack
+- [`services/auth-service/README.md`](services/auth-service/README.md)
+- [`services/gateway-api/README.md`](services/gateway-api/README.md)
 
-This runs auth-service as a container, the same way it would run in production.
+---
 
-```bash
-cp .env.example .env   # fill in JWT_SECRET, JWT_REFRESH_SECRET, and DB credentials
-make up                # starts postgres + auth-service
-```
+## CI
 
-The database starts empty — migrations need to be run once against this container:
+4 jobs run in sequence: **lint → typecheck → test → docker-build**.  
+Each job uses a matrix over all implemented services, so services within a stage
+run in parallel. Adding a new service in a future phase = one string added to
+the matrix.
 
-```bash
-docker compose -p mypong exec auth-service npx node-pg-migrate up
-```
-
-Auth-service will be available at `http://localhost:4001` once healthy. Stop everything with `make down` before switching to Option B.
-
-### Option B — Native dev (faster iteration, no image rebuilds)
-
-auth-service runs directly with Node; only Postgres runs in Docker, in its own standalone container, separate from the one Option A uses.
-
-```bash
-# Skip this if mypong-pg-dev already exists — check with: docker ps -a
-docker run --name mypong-pg-dev \
-  -e POSTGRES_DB=mypong -e POSTGRES_USER=mypong_user -e POSTGRES_PASSWORD=dev_password \
-  -p 5433:5432 -d postgres:16-alpine
-
-cd services/auth-service
-set -a && source .env && set +a
-npm run migrate:up
-npm run dev            # http://localhost:4001
-```
-
-### Running the smoke tests
-
-Works against either option above, once auth-service is up:
-
-```bash
-cd services/auth-service
-./scripts/smoke-test.sh
-```
+`main` is protected by a GitHub Ruleset: PRs are required, and all 4 CI checks
+must be green before merge.
 
 ---
 

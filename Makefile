@@ -1,11 +1,10 @@
 COMPOSE  = docker compose
 PROJECT  = mypong
 
-# Services listed here must have a real Dockerfile. Add each service as it is
-# implemented: gateway-api (PR2), user-service (Fase2), etc.
-# Phase 1 (current): postgres (official image) + auth-service.
+# Services listed here must have a real Dockerfile. Add each service as it is implemented and merged to main.
+# Phase 1 (current): postgres (official image) + auth-service + gateway-api.
 up:
-	@$(COMPOSE) -p $(PROJECT) up --build -d postgres auth-service
+	@$(COMPOSE) -p $(PROJECT) up --build -d postgres auth-service gateway-api
 
 down:
 	@$(COMPOSE) -p $(PROJECT) down
