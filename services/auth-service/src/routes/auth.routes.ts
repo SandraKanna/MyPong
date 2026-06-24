@@ -65,7 +65,14 @@ export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     const { token: refreshToken, jti } = authService.generateRefreshToken(user.id);
     await authService.saveRefreshToken(user.id, jti, new Date(Date.now() + REFRESH_TOKEN_TTL_MS));
 
-    return reply.send({ accessToken, refreshToken });
+    reply.setCookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/api/auth',
+      maxAge: 7 * 24 * 60 * 60,
+    });
+    return reply.send({ accessToken });
   });
 
 
