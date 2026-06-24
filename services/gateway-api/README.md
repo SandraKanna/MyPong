@@ -60,15 +60,24 @@ gateway-api is available at `http://localhost:4010` once started.
 gateway-api runs with Node; auth-service and Postgres run via `make up`.
 
 ```bash
-# 1. Start the base stack (postgres + auth-service + gateway-api in Docker)
+# 1. Root .env — required by make up (skip if already created)
+cp .env.example .env   # fill in JWT_SECRET, JWT_REFRESH_SECRET, POSTGRES_PASSWORD
+
+# 2. Start the base stack (postgres + auth-service + gateway-api in Docker)
 make up
 
-# 2. Run migrations if the database is empty (once per fresh volume)
+# 3. Run migrations if the database is empty (once per fresh volume)
 docker compose -p mypong exec auth-service npx node-pg-migrate up
 
-# 3. Stop the Docker gateway-api container to free the port, then run natively
+# 4. Stop the Docker gateway-api to free the port for the native process
 docker compose -p mypong stop gateway-api
+
+# 5. Service .env — required by npm run dev
 cd services/gateway-api
+cp .env.example .env   # fill in JWT_SECRET (must match root .env) and PORT
+
+# 6. Install dependencies and start
+npm install
 set -a && source .env && set +a
 npm run dev   # http://localhost:4000 (or 4010 if PORT=4010 in .env)
 ```
@@ -83,13 +92,19 @@ npm run dev   # http://localhost:4000 (or 4010 if PORT=4010 in .env)
 
 ### Smoke test
 
-Requires the base stack (`make up` + migrations) and gateway-api running,
-either in Docker (default port 4010 on the host) or natively.
+Requires the base stack (`make up` + migrations) and gateway-api running.
+The script's default URL is `http://localhost:4000` — pass an argument if
+gateway-api is on a different port:
 
 ```bash
 cd services/gateway-api
-./scripts/smoke-test.sh                          # default http://localhost:4000
-./scripts/smoke-test.sh http://localhost:4010    # if running on a different port
+
+# Docker mode (port published as 4010:4000 — default :4000 will not work)
+./scripts/smoke-test.sh http://localhost:4010
+
+# Native mode — use whichever port is in services/gateway-api/.env
+./scripts/smoke-test.sh                       # PORT=4000
+./scripts/smoke-test.sh http://localhost:4010 # PORT=4010 (macOS with nxd)
 ```
 
 8 cases: register → login → refresh → logout via proxy, health check, and three

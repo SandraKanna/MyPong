@@ -55,20 +55,27 @@ standalone container on port 5433 (separate from the Compose one — both can
 coexist).
 
 ```bash
+cd services/auth-service
+cp .env.example .env   # credentials here must match the docker run command below
+```
+
+Fill in `JWT_SECRET` and `JWT_REFRESH_SECRET` in `.env` — `DATABASE_URL` is
+pre-filled for the standalone container started next.
+
+```bash
 # Skip if mypong-pg-dev already exists — check with: docker ps -a
 docker run --name mypong-pg-dev \
   -e POSTGRES_DB=mypong -e POSTGRES_USER=mypong_user -e POSTGRES_PASSWORD=dev_password \
   -p 5433:5432 -d postgres:16-alpine
 
-cd services/auth-service
+npm install
 set -a && source .env && set +a   # exports DATABASE_URL, JWT_SECRET, etc.
 npm run migrate:up
 npm run dev                        # http://localhost:4001
 ```
 
-`DATABASE_URL` in `services/auth-service/.env` must point to `localhost:5433`
-(the standalone container), not `postgres:5432` (the Compose internal hostname,
-unreachable outside Docker).
+`DATABASE_URL` in `.env` points to `localhost:5433` (the standalone container),
+not `postgres:5432` (the Compose internal hostname, unreachable outside Docker).
 
 > **Warning**: if you sourced `.env` here and then switch to `make up` in the
 > same terminal, the shell-exported `DATABASE_URL` overrides what Docker Compose
