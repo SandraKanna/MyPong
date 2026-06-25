@@ -27,6 +27,18 @@ async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
+export async function sharedRefresh(): Promise<boolean> {
+  if (refreshPromise !== null) {
+    return refreshPromise;
+  }
+  refreshPromise = refreshAccessToken();
+  try {
+    return await refreshPromise;
+  } finally {
+    refreshPromise = null;
+  }
+}
+
 export async function apiClient(
   path: string,
   options?: RequestInit,
@@ -48,17 +60,7 @@ export async function apiClient(
     return res;
   }
 
-  // Single-flight: reuse in-flight refresh if one is already running
-  if (refreshPromise === null) {
-    refreshPromise = refreshAccessToken();
-  }
-
-  let refreshed: boolean;
-  try {
-    refreshed = await refreshPromise;
-  } finally {
-    refreshPromise = null;
-  }
+  const refreshed = await sharedRefresh();
 
   if (!refreshed) {
     return res;
