@@ -12,8 +12,8 @@ A real-time multiplayer Pong game: 1v1 online, matchmaking, tournaments, and AI 
 **Phase 1 / PR 2 — gateway-api** (complete)
 
 - `POST /api/auth/register` — create account with email + password (argon2 hash)
-- `POST /api/auth/login` — returns access token (15 min) + refresh token (7 days)
-- `POST /api/auth/refresh` — rotates refresh token, returns new pair
+- `POST /api/auth/login` — returns access token (15 min) in body; refresh token (7 days) set as httpOnly cookie
+- `POST /api/auth/refresh` — returns new access token in body, rotates refresh cookie
 - `DELETE /api/auth/session` — revokes refresh token (logout)
 - All `/api/auth/*` routes are proxied through gateway-api, which validates JWT
   access tokens for protected routes
