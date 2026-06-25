@@ -4,8 +4,6 @@ import * as authService from '../services/auth.service';
 import {
   registerSchema,
   loginSchema,
-  refreshSchema,
-  logoutSchema,
 } from '../schemas/auth.schemas';
 
 // Actual runtime shape of z.treeifyError — Zod 4.4.3 types don't reflect this.
@@ -65,19 +63,26 @@ export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     const { token: refreshToken, jti } = authService.generateRefreshToken(user.id);
     await authService.saveRefreshToken(user.id, jti, new Date(Date.now() + REFRESH_TOKEN_TTL_MS));
 
-    return reply.send({ accessToken, refreshToken });
+    reply.setCookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/api/auth',
+      maxAge: 7 * 24 * 60 * 60,
+    });
+    return reply.send({ accessToken });
   });
 
 
   fastify.post('/refresh', async (request, reply) => {
-    const result = refreshSchema.safeParse(request.body);
-    if (!result.success) {
-      return reply.status(400).send({ error: 'Invalid input', details: fieldErrors(result.error) });
+    const token = request.cookies.refreshToken;
+    if (!token) {
+      return reply.status(401).send({ error: 'Missing refresh token' });
     }
 
     let payload: { userId: number; jti: string };
     try {
-      payload = authService.verifyRefreshToken(result.data.refreshToken);
+      payload = authService.verifyRefreshToken(token);
     } catch {
       return reply.status(401).send({ error: 'Invalid or expired refresh token' });
     }
@@ -94,26 +99,36 @@ export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     const { token: refreshToken, jti: newJti } = authService.generateRefreshToken(payload.userId);
     await authService.saveRefreshToken(payload.userId, newJti, new Date(Date.now() + REFRESH_TOKEN_TTL_MS));
 
-    return reply.send({ accessToken, refreshToken });
+    reply.setCookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/api/auth',
+      maxAge: 7 * 24 * 60 * 60,
+    });
+    return reply.send({ accessToken });
   });
 
 
   fastify.delete('/session', async (request, reply) => {
-    const result = logoutSchema.safeParse(request.body);
-    if (!result.success) {
-      return reply.status(400).send({ error: 'Invalid input', details: fieldErrors(result.error) });
+    const token = request.cookies.refreshToken;
+    if (!token) {
+      reply.clearCookie('refreshToken', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/api/auth' });
+      return reply.status(204).send();
     }
 
     let jti: string;
     try {
-      ({ jti } = authService.verifyRefreshToken(result.data.refreshToken));
+      ({ jti } = authService.verifyRefreshToken(token));
     } catch {
       // Token already expired or invalid — it can't be used anyway, treat as logged out
+      reply.clearCookie('refreshToken', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/api/auth' });
       return reply.status(204).send();
     }
 
     // Outside the catch: DB errors propagate and Fastify returns 500
     await authService.revokeRefreshToken(jti);
+    reply.clearCookie('refreshToken', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/api/auth' });
     return reply.status(204).send();
   });
 

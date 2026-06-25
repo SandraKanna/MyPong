@@ -115,7 +115,7 @@ describe('auth-service routes', () => {
   // ── POST /login ─────────────────────────────────────────────────────────────
 
   describe('POST /login', () => {
-    it('case 4 — returns 200 with accessToken and refreshToken for valid credentials', async () => {
+    it('case 4 — returns 200 with accessToken in body and refreshToken in Set-Cookie', async () => {
       mockQuery
         .mockResolvedValueOnce(rows([MOCK_USER])) // findUserByEmail → found
         .mockResolvedValueOnce(rows([]));          // saveRefreshToken → ok
@@ -130,9 +130,15 @@ describe('auth-service routes', () => {
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body).toHaveProperty('accessToken');
-      expect(body).toHaveProperty('refreshToken');
       expect(typeof body.accessToken).toBe('string');
-      expect(typeof body.refreshToken).toBe('string');
+      expect(body).not.toHaveProperty('refreshToken');
+
+      const cookie = res.cookies.find(c => c.name === 'refreshToken');
+      expect(cookie).toBeDefined();
+      expect(typeof cookie!.value).toBe('string');
+      expect(cookie!.httpOnly).toBe(true);
+      expect(cookie!.sameSite).toBe('Strict');
+      expect(cookie!.path).toBe('/api/auth');
     });
 
     it('case 5 — returns 401 with same message for wrong password (no user enumeration)', async () => {
@@ -167,7 +173,7 @@ describe('auth-service routes', () => {
   // ── POST /refresh ───────────────────────────────────────────────────────────
 
   describe('POST /refresh', () => {
-    it('case 6 — returns 200 with new token pair for a valid refresh token', async () => {
+    it('case 6 — returns 200 with new accessToken in body and rotated refreshToken in Set-Cookie', async () => {
       const { token, jti } = generateRefreshToken(1);
 
       mockQuery
@@ -178,15 +184,21 @@ describe('auth-service routes', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/refresh',
-        payload: { refreshToken: token },
+        cookies: { refreshToken: token },
       });
 
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body).toHaveProperty('accessToken');
-      expect(body).toHaveProperty('refreshToken');
+      expect(body).not.toHaveProperty('refreshToken');
+
+      const cookie = res.cookies.find(c => c.name === 'refreshToken');
+      expect(cookie).toBeDefined();
       // New refresh token must differ from the one used
-      expect(body.refreshToken).not.toBe(token);
+      expect(cookie!.value).not.toBe(token);
+      expect(cookie!.httpOnly).toBe(true);
+      expect(cookie!.sameSite).toBe('Strict');
+      expect(cookie!.path).toBe('/api/auth');
     });
 
     it('case 7 — returns 401 for an already-rotated refresh token', async () => {
@@ -197,7 +209,7 @@ describe('auth-service routes', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/refresh',
-        payload: { refreshToken: token },
+        cookies: { refreshToken: token },
       });
 
       expect(res.statusCode).toBe(401);
@@ -208,18 +220,28 @@ describe('auth-service routes', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/refresh',
-        payload: { refreshToken: 'not.a.valid.jwt' },
+        cookies: { refreshToken: 'not.a.valid.jwt' },
       });
 
       expect(res.statusCode).toBe(401);
       expect(res.json()).toMatchObject({ error: 'Invalid or expired refresh token' });
+    });
+
+    it('returns 401 when no cookie is present', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/refresh',
+      });
+
+      expect(res.statusCode).toBe(401);
+      expect(res.json()).toMatchObject({ error: 'Missing refresh token' });
     });
   });
 
   // ── DELETE /session ─────────────────────────────────────────────────────────
 
   describe('DELETE /session', () => {
-    it('case 8 — returns 204 on logout with a valid refresh token', async () => {
+    it('case 8 — returns 204 and clears cookie on logout with a valid refresh token', async () => {
       const { token } = generateRefreshToken(1);
 
       mockQuery.mockResolvedValueOnce(rows([])); // revokeRefreshToken → ok
@@ -227,25 +249,41 @@ describe('auth-service routes', () => {
       const res = await app.inject({
         method: 'DELETE',
         url: '/session',
-        payload: { refreshToken: token },
+        cookies: { refreshToken: token },
       });
 
       expect(res.statusCode).toBe(204);
+      const cookie = res.cookies.find(c => c.name === 'refreshToken');
+      expect(cookie).toBeDefined();
+      expect(cookie!.maxAge).toBe(0);
     });
 
-    it('case 9 — returns 204 when logging out with an already-revoked token (idempotent)', async () => {
-      // Token is cryptographically valid but expired-or-invalid is simulated
-      // by using a token signed with the wrong secret — verifyRefreshToken throws,
-      // and the route treats it as already-logged-out (204, no DB call).
+    it('case 9 — returns 204 and clears cookie for an invalid token (idempotent)', async () => {
       const res = await app.inject({
         method: 'DELETE',
         url: '/session',
-        payload: { refreshToken: 'invalid.token.here' },
+        cookies: { refreshToken: 'invalid.token.here' },
       });
 
       expect(res.statusCode).toBe(204);
       // DB must NOT have been called — no revokeRefreshToken on a bad token
       expect(mockQuery).not.toHaveBeenCalled();
+      const cookie = res.cookies.find(c => c.name === 'refreshToken');
+      expect(cookie).toBeDefined();
+      expect(cookie!.maxAge).toBe(0);
+    });
+
+    it('returns 204 and clears cookie when no cookie is present (idempotent)', async () => {
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/session',
+      });
+
+      expect(res.statusCode).toBe(204);
+      expect(mockQuery).not.toHaveBeenCalled();
+      const cookie = res.cookies.find(c => c.name === 'refreshToken');
+      expect(cookie).toBeDefined();
+      expect(cookie!.maxAge).toBe(0);
     });
 
     it('returns 500 when DB fails during revocation (token is valid)', async () => {
@@ -256,7 +294,7 @@ describe('auth-service routes', () => {
       const res = await app.inject({
         method: 'DELETE',
         url: '/session',
-        payload: { refreshToken: token },
+        cookies: { refreshToken: token },
       });
 
       // DB error must NOT be swallowed silently

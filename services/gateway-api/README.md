@@ -93,6 +93,6 @@ cd services/gateway-api
 ./scripts/smoke-test.sh http://localhost:4010 # PORT=4010 (macOS with nxd)
 ```
 
-8 cases: register → login → refresh → logout via proxy, health check, and three
-JWT deny cases (`/api/users/me` without auth, with malformed token, without
-Bearer prefix).
+4 cases: health check and three JWT deny cases (`/api/users/me` without auth,
+with malformed token, without Bearer prefix). Auth flow is covered by the
+auth-service smoke test.

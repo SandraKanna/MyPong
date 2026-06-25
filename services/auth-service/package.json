@@ -18,6 +18,7 @@
     "dir": "migrations"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.0.2",
     "argon2": "^0.44.0",
     "fastify": "^5.8.5",
     "jsonwebtoken": "^9.0.3",

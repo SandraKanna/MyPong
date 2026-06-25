@@ -8,8 +8,8 @@ access tokens (15 min) and rotating refresh tokens (7 days) stored in Postgres.
 | Method   | Path        | Description                                     |
 |----------|-------------|-------------------------------------------------|
 | `POST`   | `/register` | Create account — email + password (argon2 hash) |
-| `POST`   | `/login`    | Returns access token + refresh token            |
-| `POST`   | `/refresh`  | Rotates refresh token, returns new pair         |
+| `POST`   | `/login`    | Returns access token in body; refresh token as httpOnly cookie  |
+| `POST`   | `/refresh`  | Returns new access token in body, rotates refresh cookie        |
 | `DELETE` | `/session`  | Revokes refresh token (logout)                  |
 
 These paths are without the `/api/auth` prefix — that prefix is added by
@@ -85,9 +85,11 @@ npm run dev                        # http://localhost:4001
 
 ### Smoke test
 
-Works against either setup above, once auth-service is up:
+Runs against gateway-api (default: `:4010`) — the cookie has `Path=/api/auth`,
+which only matches the gateway's `/api/auth/*` routes, not auth-service's bare
+paths. Requires both auth-service and gateway-api running.
 
 ```bash
 cd services/auth-service
-./scripts/smoke-test.sh   # 9 cases: register, login, refresh, logout + deny cases
+./scripts/smoke-test.sh http://localhost:4010   # 10 cases: register, login, refresh, logout + deny cases
 ```
