@@ -3,9 +3,22 @@ PROJECT  = mypong
 
 # Services listed here must have a real Dockerfile. Add each service as it is implemented and merged to main.
 # Phase 1 (current): postgres (official image) + auth-service + gateway-api.
-up:
-	@$(COMPOSE) -p $(PROJECT) up --build -d postgres auth-service gateway-api
 
+SERVICES = postgres auth-service gateway-api
+
+# Build (if needed) and create + start the stack. Use after code changes.
+up:
+	@$(COMPOSE) -p $(PROJECT) up --build -d $(SERVICES)
+
+# Stop running containers WITHOUT removing them (fast; preserves state and data).
+stop:
+	@$(COMPOSE) -p $(PROJECT) stop
+
+# Start previously-stopped containers WITHOUT rebuilding (fast).
+start:
+	@$(COMPOSE) -p $(PROJECT) start
+
+# Stop and REMOVE containers (keeps images and volumes).
 down:
 	@$(COMPOSE) -p $(PROJECT) down
 
@@ -15,14 +28,14 @@ logs:
 ps:
 	@$(COMPOSE) -p $(PROJECT) ps
 
+# 	rmi local to clean only locally-built images (not pulled ones like postgres).
 clean:
 	@$(COMPOSE) -p $(PROJECT) down --rmi local
-# 	rmi local to clean only local images (not the ones downloaded from Docker hub for example)
 
+# 	"-v" to clean named volumes as well
 fclean:
 	@$(COMPOSE) -p $(PROJECT) down --rmi local -v
-# 	"-v" to clean named volumes as well
 
 rebuild: fclean up
 
-.PHONY: up down logs ps clean fclean rebuild
+.PHONY: up start stop down logs ps clean fclean rebuild
