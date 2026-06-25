@@ -64,7 +64,7 @@ describe('authProxyRoutes', () => {
     // 204 is a null-body status per WHATWG spec — body must be null, not an empty string.
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     await app.inject({ method: 'DELETE', url: '/api/auth/session' });
 
