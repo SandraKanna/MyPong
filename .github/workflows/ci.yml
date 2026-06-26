@@ -5,6 +5,7 @@ on:
     paths:
       - "services/**"
       - "frontend/**"
+      - "nginx/**"
       - "docker-compose.yml"
       - "Makefile"
       - ".github/workflows/ci.yml"
@@ -18,7 +19,9 @@ on:
 # needs: <stage> waits for ALL matrix variants of that stage to pass.
 #
 # Frontend runs as a single independent job (lint → typecheck → test → build),
-# no matrix, no docker-build (nginx serves the static build — see Public Edge PR).
+# no matrix. nginx+frontend are deployed as one image (Public Edge), so the
+# docker build of the nginx image (which includes the Vite build) runs here as
+# the final step of this job — not as a separate matrix entry.
 
 jobs:
   lint:
@@ -139,3 +142,7 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Docker build (nginx + frontend)
+        working-directory: .
+        run: docker build -f nginx/Dockerfile -t mypong-nginx:ci .
