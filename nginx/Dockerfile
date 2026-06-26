@@ -27,10 +27,13 @@ FROM nginx:alpine
 COPY --from=builder /app/frontend/dist /usr/share/nginx/html
 
 # nginx config baked into the image.
-# NOTE: docker-compose.yml currently bind-mounts ./nginx:/etc/nginx/conf.d:ro,
-# which shadows this COPY at runtime and places certs at the wrong path for TLS.
-# Resolve both the mount and the certs path in the compose update (next step).
-COPY nginx/nginx.conf /etc/nginx/conf.d/nginx.conf
+# Overwrites the base image's default.conf (same destination path) —
+# this is the nginx:alpine image's default site config, replaced by
+# ours. Source file keeps the descriptive name nginx/nginx.conf in
+# the repo; only the destination inside the container must match
+# default.conf so this COPY guarantees there's no second server
+# block competing on the same port (no separate rm step to forget).
+COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80 443
 
