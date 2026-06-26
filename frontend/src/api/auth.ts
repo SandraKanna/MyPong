@@ -36,6 +36,15 @@ export async function login(email: string, password: string): Promise<void> {
   useAuthStore.getState().setAuth(accessToken, user);
 }
 
+export async function logout(): Promise<void> {
+  try {
+    await apiClient('/api/auth/session', { method: 'DELETE' });
+  } catch (e) {
+    console.error('logout request failed:', e);
+  }
+  useAuthStore.getState().clearAuth();
+}
+
 export async function register(email: string, password: string): Promise<void> {
   const res = await apiClient('/api/auth/register', {
     method: 'POST',
