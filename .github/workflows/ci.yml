@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "services/**"
+      - "frontend/**"
       - "docker-compose.yml"
       - "Makefile"
       - ".github/workflows/ci.yml"
@@ -11,10 +12,13 @@ on:
     branches:
       - main
 
-# Jobs run sequentially: lint → typecheck → test → docker-build.
+# Backend jobs run sequentially: lint → typecheck → test → docker-build.
 # Each stage uses a matrix over services so all services run in parallel within
 # the stage. Adding a new service in future phases = one string in the matrix.
 # needs: <stage> waits for ALL matrix variants of that stage to pass.
+#
+# Frontend runs as a single independent job (lint → typecheck → test → build),
+# no matrix, no docker-build (nginx serves the static build — see Public Edge PR).
 
 jobs:
   lint:
@@ -105,3 +109,33 @@ jobs:
 
       - name: Build ${{ matrix.service }} image
         run: docker build -f services/${{ matrix.service }}/Dockerfile -t mypong-${{ matrix.service }}:ci .
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
