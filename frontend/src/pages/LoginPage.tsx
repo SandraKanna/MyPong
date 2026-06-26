@@ -26,16 +26,22 @@ export default function LoginPage() {
     <div>
       <h2>Iniciar sesión</h2>
       <div>
+        {/* accessible name for screen readers; also enables role/label-based test queries */}
+        {/* TODO: replace with a visible associated <label> during the CSS redesign */}
         <input
           type="email"
+          aria-label="Email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
       </div>
       <div>
+        {/* accessible name for screen readers; also enables role/label-based test queries */}
+        {/* TODO: replace with a visible associated <label> during the CSS redesign */}
         <input
           type="password"
+          aria-label="Contraseña"
           placeholder="Contraseña"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
