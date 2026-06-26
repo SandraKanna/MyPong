@@ -14,7 +14,7 @@ export default function RegisterPage() {
     setError(null);
     try {
       await register(email, password);
-      navigate('/login');
+      void navigate('/login');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error inesperado');
     } finally {
@@ -49,7 +49,7 @@ export default function RegisterPage() {
       </div>
       {error !== null && <p style={{ color: 'red' }}>{error}</p>}
       <div>
-        <button onClick={handleSubmit} disabled={submitting}>
+        <button onClick={() => void handleSubmit()} disabled={submitting}>
           Registrarse
         </button>
       </div>

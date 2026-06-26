@@ -14,7 +14,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(email, password);
-      navigate('/', { replace: true });
+      void navigate('/', { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error inesperado');
     } finally {
@@ -49,7 +49,7 @@ export default function LoginPage() {
       </div>
       {error !== null && <p style={{ color: 'red' }}>{error}</p>}
       <div>
-        <button onClick={handleSubmit} disabled={submitting}>
+        <button onClick={() => void handleSubmit()} disabled={submitting}>
           Entrar
         </button>
       </div>

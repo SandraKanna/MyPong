@@ -6,14 +6,14 @@ export default function HomePage() {
 
   async function handleLogout() {
     await logout();
-    navigate('/login', { replace: true });
+    void navigate('/login', { replace: true });
   }
 
   return (
     <>
       <h1>MyPong</h1>
       <p>Home</p>
-      <button onClick={handleLogout}>Cerrar sesión</button>
+      <button onClick={() => void handleLogout()}>Cerrar sesión</button>
     </>
   );
 }
