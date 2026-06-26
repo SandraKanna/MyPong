@@ -1,11 +1,9 @@
 import { useState } from 'react';
+import { Link, useNavigate } from 'react-router';
 import { login } from '../api/auth';
 
-interface Props {
-  onSwitchToRegister: () => void;
-}
-
-export default function LoginPage({ onSwitchToRegister }: Props) {
+export default function LoginPage() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -16,6 +14,7 @@ export default function LoginPage({ onSwitchToRegister }: Props) {
     setError(null);
     try {
       await login(email, password);
+      navigate('/', { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error inesperado');
     } finally {
@@ -49,9 +48,7 @@ export default function LoginPage({ onSwitchToRegister }: Props) {
         </button>
       </div>
       <div>
-        <button onClick={onSwitchToRegister}>
-          ¿No tenés cuenta? Registrate
-        </button>
+        <Link to="/register">¿No tenés cuenta? Registrate</Link>
       </div>
     </div>
   );
