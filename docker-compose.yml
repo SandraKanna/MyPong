@@ -8,28 +8,26 @@ services:
   # ── Public edge ──────────────────────────────────────────────────────────────
 
   nginx:
-    image: nginx:alpine
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
     ports:
       - "80:80"
       - "443:443"
+    # nginx.conf is baked into the image via COPY in nginx/Dockerfile — no bind-mount needed.
+    # Only certs are mounted: generated locally by scripts/generate-dev-cert.sh, never baked in.
     volumes:
-      - ./nginx:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
       - avatars_data:/var/www/avatars:ro
     networks:
       - frontend-net
     depends_on:
-      - gateway-api
-      - gateway-ws
+      gateway-api:
+        condition: service_healthy
+      # gateway-ws excluded from depends_on — no real Dockerfile yet
+      # (Phase 3). Re-add once it exists, so nginx doesn't depend on a
+      # service it can't build or start.
     # TODO: healthcheck
-
-  frontend:
-    build:
-      context: ./frontend
-    ports:
-      - "3000:3000"
-    networks:
-      - frontend-net
-    # Dev only — in production nginx serves the static build directly
 
   # ── Gateways (bridge frontend-net ↔ backend-net) ─────────────────────────────
 

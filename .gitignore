@@ -44,6 +44,9 @@ ehthumbs.db
 *.swo
 *~
 
+# TLS certs — generated locally, never committed
+nginx/certs/
+
 # Misc
 .cache/
 tmp/
