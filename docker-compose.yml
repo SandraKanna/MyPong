@@ -51,7 +51,8 @@ services:
     depends_on:
       auth-service:
         condition: service_healthy
-      # - user-service #no Dockerfile yet
+      user-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/health"]
       interval: 10s
@@ -109,9 +110,6 @@ services:
       dockerfile: services/user-service/Dockerfile
     expose:
       - "4002"
-    # TODO: remove this ports mapping once proxy in gateway-api is implemented
-    ports:
-      - "4002:4002"
     environment:
       PORT: "4002"
       DATABASE_URL: ${DATABASE_URL}

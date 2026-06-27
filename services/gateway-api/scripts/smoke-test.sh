@@ -63,7 +63,6 @@ r=$(req GET /health)
 assert_status "GET /health — public route" "200" "$(status "$r")" "$(body "$r")"
 
 # ── JWT middleware deny cases ─────────────────────────────────────────────────
-# /api/users/me does not exist yet (user-service is Phase 2).
 # These cases verify the JWT middleware rejects bad tokens BEFORE any proxy
 # attempt. If middleware is broken, the gateway would try to proxy and return
 # 502 instead of 401.
