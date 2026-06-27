@@ -86,7 +86,7 @@ r=$(req GET "$BASE_URL/me")
 assert_status "GET /me — no x-user-id header (deny)" "401" "$(status "$r")" "$(body "$r")"
 
 # 2. DENY: PATCH /me without x-user-id → 401
-r=$(req POST "$BASE_URL/me" "{\"username\":\"$TEST_USERNAME\"}")
+r=$(req PATCH "$BASE_URL/me" "{\"username\":\"$TEST_USERNAME\"}")
 assert_status "PATCH /me — no x-user-id header (deny)" "401" "$(status "$r")" "$(body "$r")"
 
 # 3. GET /me → 404 (no profile yet)
