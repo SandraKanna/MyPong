@@ -4,6 +4,7 @@ const envSchema = z.object({
   PORT: z.string().regex(/^\d+$/).transform(Number),
   JWT_SECRET: z.string().min(32),
   AUTH_SERVICE_URL: z.url(),
+  USER_SERVICE_URL: z.url(),
 });
 
 const parsed = envSchema.safeParse(process.env);
