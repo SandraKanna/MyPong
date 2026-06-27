@@ -1,0 +1,29 @@
+import { db } from '../db';
+
+export interface UserProfile {
+  user_id: number;
+  username: string | null;
+  avatar_url: string | null;
+}
+
+export async function findProfile(userId: number): Promise<UserProfile | null> {
+  const { rows } = await db.query<UserProfile>(
+    'SELECT * FROM user_profiles WHERE user_id = $1',
+    [userId],
+  );
+  return rows[0] ?? null;
+}
+
+// INSERT ... ON CONFLICT (user_id) handles both first-time creation and updates.
+// If the username UNIQUE constraint fires (a different user already has it),
+// Postgres throws error code 23505 — the route handler catches it and returns 409.
+export async function upsertProfile(userId: number, username: string): Promise<UserProfile> {
+  const { rows } = await db.query<UserProfile>(
+    `INSERT INTO user_profiles (user_id, username)
+     VALUES ($1, $2)
+     ON CONFLICT (user_id) DO UPDATE SET username = EXCLUDED.username
+     RETURNING *`,
+    [userId, username],
+  );
+  return rows[0];
+}

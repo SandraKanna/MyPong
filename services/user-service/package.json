@@ -1,5 +1,5 @@
 {
-  "name": "@mypong/auth-service",
+  "name": "@mypong/user-service",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,24 +7,20 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "migrate:up": "node-pg-migrate up --migrations-table pgmigrations_auth",
-    "migrate:down": "node-pg-migrate down --migrations-table pgmigrations_auth",
-    "migrate:create": "node-pg-migrate create --migrations-table pgmigrations_auth",
+    "migrate:up": "node-pg-migrate up --migrations-table pgmigrations_user",
+    "migrate:down": "node-pg-migrate down --migrations-table pgmigrations_user",
+    "migrate:create": "node-pg-migrate create --migrations-table pgmigrations_user",
     "test": "NODE_ENV=test vitest run",
     "test:watch": "NODE_ENV=test vitest"
   },
   "dependencies": {
-    "@fastify/cookie": "^11.0.2",
-    "argon2": "^0.44.0",
     "fastify": "^5.8.5",
-    "jsonwebtoken": "^9.0.3",
     "node-pg-migrate": "^8.0.4",
     "pg": "^8.22.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.0.0",
     "@types/pg": "^8.20.0",
     "eslint": "^10.5.0",

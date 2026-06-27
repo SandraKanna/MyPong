@@ -44,7 +44,7 @@ make up   # starts postgres + auth-service
 The database starts empty — run migrations once:
 
 ```bash
-docker compose -p mypong exec auth-service npx node-pg-migrate up
+docker compose -p mypong exec auth-service npx node-pg-migrate up --migrations-table pgmigrations_auth
 ```
 
 auth-service is available at `http://localhost:4001` once healthy.

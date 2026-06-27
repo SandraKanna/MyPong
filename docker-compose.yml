@@ -109,6 +109,9 @@ services:
       dockerfile: services/user-service/Dockerfile
     expose:
       - "4002"
+    # TODO: remove this ports mapping once proxy in gateway-api is implemented
+    ports:
+      - "4002:4002"
     environment:
       PORT: "4002"
       DATABASE_URL: ${DATABASE_URL}
@@ -117,8 +120,14 @@ services:
     networks:
       - backend-net
     depends_on:
-      - postgres
-    # TODO: healthcheck
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   game-service:
     build:
