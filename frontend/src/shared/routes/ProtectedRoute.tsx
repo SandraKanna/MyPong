@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from 'react-router';
-import { useAuthStore } from '../state/authState';
+import { useAuthStore } from '../../features/auth/state/authState';
 
 export default function ProtectedRoute() {
   const status = useAuthStore((s) => s.status);

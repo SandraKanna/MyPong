@@ -2,10 +2,10 @@ import { describe, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import RegisterPage from '../src/pages/RegisterPage';
-import { register } from '../src/api/auth';
+import RegisterPage from '../src/features/auth/pages/RegisterPage';
+import { register } from '../src/features/auth/api/auth';
 
-vi.mock('../src/api/auth');
+vi.mock('../src/features/auth/api/auth');
 
 beforeEach(() => {
   vi.resetAllMocks();

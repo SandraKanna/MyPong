@@ -1,4 +1,4 @@
-import { apiClient } from './httpClient';
+import { apiClient } from '../../../shared/api/httpClient';
 import { useAuthStore, User } from '../state/authState';
 
 async function readErrorMessage(res: Response, defaultMessage: string): Promise<string> {

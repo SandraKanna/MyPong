@@ -1,8 +1,8 @@
 import { describe, it, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import ProtectedRoute from '../src/routes/ProtectedRoute';
-import { useAuthStore } from '../src/state/authState';
+import ProtectedRoute from '../src/shared/routes/ProtectedRoute';
+import { useAuthStore } from '../src/features/auth/state/authState';
 
 beforeEach(() => {
   useAuthStore.setState({ status: 'loading', accessToken: null, user: null });

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { sharedRefresh } from '../api/httpClient';
+import { sharedRefresh } from '../../../shared/api/httpClient';
 
 export function useBootstrapAuth(): void {
   useEffect(() => {

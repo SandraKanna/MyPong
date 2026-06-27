@@ -1,4 +1,4 @@
-import { useAuthStore } from '../state/authState';
+import { useAuthStore } from '../../features/auth/state/authState';
 
 let refreshPromise: Promise<boolean> | null = null;
 

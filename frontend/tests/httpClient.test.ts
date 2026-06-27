@@ -16,8 +16,8 @@ function makeResponse(status: number, body: unknown, headers: HeadersInit = {}):
 
 describe('apiClient — single-flight refresh', () => {
   it('two concurrent 401s trigger only one refresh call', async () => {
-    const { useAuthStore } = await import('../src/state/authState');
-    const { apiClient } = await import('../src/api/httpClient');
+    const { useAuthStore } = await import('../src/features/auth/state/authState');
+    const { apiClient } = await import('../src/shared/api/httpClient');
 
     useAuthStore.setState({ accessToken: 'old-token', status: 'authenticated', user: null });
 
@@ -41,8 +41,8 @@ describe('apiClient — single-flight refresh', () => {
 
 describe('apiClient — retry with new token', () => {
   it('retries with new Authorization header after successful refresh', async () => {
-    const { useAuthStore } = await import('../src/state/authState');
-    const { apiClient } = await import('../src/api/httpClient');
+    const { useAuthStore } = await import('../src/features/auth/state/authState');
+    const { apiClient } = await import('../src/shared/api/httpClient');
 
     useAuthStore.setState({ accessToken: 'old-token', status: 'authenticated', user: null });
 
@@ -64,7 +64,7 @@ describe('apiClient — retry with new token', () => {
 
 describe('apiClient — skip auth paths', () => {
   it('does not attempt refresh on 401 from /api/auth/login', async () => {
-    const { apiClient } = await import('../src/api/httpClient');
+    const { apiClient } = await import('../src/shared/api/httpClient');
 
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValue(makeResponse(401, { error: 'invalid credentials' }));
@@ -81,8 +81,8 @@ describe('apiClient — skip auth paths', () => {
 
 describe('apiClient — refresh failure', () => {
   it('returns the original 401 and calls clearAuth when refresh fails', async () => {
-    const { useAuthStore } = await import('../src/state/authState');
-    const { apiClient } = await import('../src/api/httpClient');
+    const { useAuthStore } = await import('../src/features/auth/state/authState');
+    const { apiClient } = await import('../src/shared/api/httpClient');
 
     useAuthStore.setState({ accessToken: 'expired-token', status: 'authenticated', user: null });
 
