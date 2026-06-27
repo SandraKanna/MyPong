@@ -5,6 +5,7 @@ import PublicLayout from './layouts/PublicLayout';
 import LoginPage from './features/auth/pages/LoginPage';
 import RegisterPage from './features/auth/pages/RegisterPage';
 import HomePage from './features/home/pages/HomePage';
+import ProfilePage from './features/profile/pages/ProfilePage';
 import ProtectedRoute from './shared/routes/ProtectedRoute';
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
             <Route path="/" element={<HomePage />} />
+            <Route path="/profile" element={<ProfilePage />} />
           </Route>
         </Route>
       </Routes>
