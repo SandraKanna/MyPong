@@ -1,5 +1,6 @@
 import { FastifyPluginCallback } from 'fastify';
 import { config } from '../config.js';
+import { proxyRequest } from '../lib/proxyRequest.js';
 
 export const authProxyRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.all('/api/auth/*', async (request, reply) => {
@@ -8,13 +9,11 @@ export const authProxyRoutes: FastifyPluginCallback = (fastify, _opts, done) => 
 
     let upstreamResponse: Response;
     try {
-      upstreamResponse = await fetch(upstreamUrl, {
+      upstreamResponse = await proxyRequest(upstreamUrl, {
         method: request.method,
-        headers: {
-          ...(request.body != null ? { 'content-type': 'application/json' } : {}),
-          ...(request.headers.cookie ? { cookie: request.headers.cookie } : {}),
-        },
-        body: request.body != null ? JSON.stringify(request.body) : undefined,
+        body: request.body,
+        cookie: request.headers.cookie,
+        userId: request.userId,
       });
     } catch (err) {
       request.log.error(
