@@ -15,6 +15,8 @@ Nginx is the only process exposed to the outside world. Terminates HTTPS and rou
 The frontend is a React single-page application (SPA) running in the browser after the initial HTML/JS/CSS load. 
 It talks to the backend only through /`api/*` (REST) or `/ws` (WebSocket) — never directly to an internal service. In production, nginx serves the compiled static build; the dev server is local-only.
 
+Internally, it's organized by feature (auth, profile, game, ...), each owning its own pages, API calls, and state. A shared layout wraps authenticated routes; public routes (login, register) use a separate, simpler one. Infrastructure that doesn't belong to any single feature — route guarding, the HTTP client — lives in a shared layer instead.
+
 ---
 
 ## Gateways

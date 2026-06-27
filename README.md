@@ -8,17 +8,14 @@ A real-time multiplayer Pong game: 1v1 online, matchmaking, tournaments, and AI 
 
 ## What is implemented today
 
-**Phase 1 / PR 1 — auth-service** (complete)  
-**Phase 1 / PR 2 — gateway-api** (complete)
+- **auth-service** — register, login, refresh (with rotation), logout (with revocation)
+- **gateway-api** — REST proxy with JWT validation for protected routes
+- **Public Edge (nginx)** — TLS termination, reverse proxy, static frontend serving
+- **frontend** — login and register pages, protected routing
 
-- `POST /api/auth/register` — create account with email + password (argon2 hash)
-- `POST /api/auth/login` — returns access token (15 min) in body; refresh token (7 days) set as httpOnly cookie
-- `POST /api/auth/refresh` — returns new access token in body, rotates refresh cookie
-- `DELETE /api/auth/session` — revokes refresh token (logout)
-- All `/api/auth/*` routes are proxied through gateway-api, which validates JWT
-  access tokens for protected routes
+See each service's README for endpoint-level detail and setup.
 
-Everything else (WebSocket hub, game engine, matchmaking, tournaments, AI, frontend) is under construction.
+Everything else (WebSocket hub, game engine, matchmaking, tournaments, AI, user profiles) is under construction.
 
 ---
 
@@ -38,8 +35,7 @@ Fill in `JWT_SECRET`, `JWT_REFRESH_SECRET`, and `POSTGRES_PASSWORD` — then upd
 `DATABASE_URL` to use that same password (it appears twice in the file; the
 comment in `.env.example` explains why).
 
-`make up` then starts the full implemented stack: `postgres`, `auth-service`, and
-`gateway-api`. See each service's README for endpoint-level testing.
+`make up` then starts the implemented stack. See each service's README for endpoint-level testing.
 
 ---
 
@@ -54,21 +50,20 @@ Each service has its own README with the full setup (Docker + native) and smoke 
 
 ## CI
 
-4 jobs run in sequence: **lint → typecheck → test → docker-build**.  
-Each job uses a matrix over all implemented services, so services within a stage
-run in parallel. Adding a new service in a future phase = one string added to
-the matrix.
+Backend services run through 4 jobs in sequence: **lint → typecheck → test → docker-build**, using a matrix over all implemented services. Services within a stage run in parallel.
+Adding a new backend service in a future phase = one string added to the matrix.
 
-`main` is protected by a GitHub Ruleset: PRs are required, and all 4 CI checks
-must be green before merge.
+The frontend (including Public Edge/nginx) runs as a separate job: **lint → typecheck → test → build**, with nginx's Docker build as its final step.
+
+`main` is protected by a GitHub Ruleset: PRs are required, and all required checks (backend matrix + Frontend job) must be green before merge.
 
 ---
 
 ## Phase plan
 
 | Phase 0 | Repo structure, tsconfig, Docker Compose skeleton, Makefile, CI (Done)
-| Phase 1 | auth-service + gateway-api + frontend login/register (In progress)
-| Phase 2 | user-service + frontend profile + avatar upload (Pending)
+| Phase 1 | auth-service + gateway-api + frontend login/register + Public Edge (Done)
+| Phase 2 | user-service + frontend architecture skeleton + profile + avatar upload (Pending)
 | Phase 3 | gateway-ws + game-service + Pong board with local 1v1 (Pending)
 | Phase 4 | matchmaking-service + frontend lobby (Pending)
 | Phase 5 | ia-bot-service + guest mode (Pending)
@@ -82,7 +77,7 @@ must be green before merge.
 
 | Layer     |                      Technology                          
 |-----------|-------------------------------------------------------------
-| Frontend  | React 18 + TypeScript + Vite + Zustand + React Router
+| Frontend  | React 19 + TypeScript 6 + Vite 8 + Zustand + React Router
 | Backend   | Node.js 24 + Fastify + TypeScript (strict, compiled) 
 | Auth      | JWT (access 15 min + refresh 7 days) + argon2        
 | Database  | PostgreSQL 16 + node-pg-migrate
