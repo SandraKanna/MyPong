@@ -1,5 +1,7 @@
+// Placeholder feature: today shows email + logout only.
+// Will be reshaped in Phase 2 when user-service provides real profile data.
 import { useNavigate } from 'react-router';
-import { logout } from '../api/auth';
+import { logout } from '../../auth/api/auth';
 
 export default function HomePage() {
   const navigate = useNavigate();
