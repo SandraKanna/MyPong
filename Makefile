@@ -4,7 +4,7 @@ PROJECT  = mypong
 # Services listed here must have a real Dockerfile. Add each service as it is implemented and merged to main.
 # Phase 1 + Public Edge: postgres (official image) + auth-service + gateway-api + nginx.
 
-SERVICES = postgres auth-service gateway-api nginx
+SERVICES = postgres auth-service user-service gateway-api nginx
 
 # Build (if needed) and create + start the stack. Use after code changes.
 up:
