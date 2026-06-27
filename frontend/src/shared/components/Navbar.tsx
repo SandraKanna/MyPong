@@ -12,7 +12,7 @@ export default function Navbar() {
   return (
     <nav className="bg-bg text-fg px-4 py-3 flex items-center gap-6">
       <Link to="/">MyPong</Link>
-      <Link to="/">Profile</Link>
+      <Link to="/profile">Profile</Link>
       <button onClick={() => void handleLogout()}>Logout</button>
     </nav>
   );

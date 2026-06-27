@@ -5,7 +5,7 @@ export default function AppLayout() {
   return (
     <>
       <Navbar />
-      <main className="bg-bg text-fg p-4">
+      <main className="bg-surface text-fg p-4">
         <Outlet />
       </main>
     </>

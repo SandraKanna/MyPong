@@ -37,10 +37,10 @@ describe('Navbar', () => {
     expect(brand.getAttribute('href')).toBe('/');
   });
 
-  it('renders the Profile link pointing to /', () => {
+  it('renders the Profile link pointing to /profile', () => {
     renderNavbar();
     const profile = screen.getByRole('link', { name: 'Profile' });
-    expect(profile.getAttribute('href')).toBe('/');
+    expect(profile.getAttribute('href')).toBe('/profile');
   });
 
   it('calls logout() when Logout button is clicked', async () => {
