@@ -48,7 +48,7 @@ by the Nx daemon, `nxd`) — the container still listens on 4000 internally.
 The database starts empty — run migrations once:
 
 ```bash
-docker compose -p mypong exec auth-service npx node-pg-migrate up
+docker compose -p mypong exec auth-service npx node-pg-migrate up --migrations-table pgmigrations_auth
 ```
 
 gateway-api is available at `http://localhost:4010` once started.

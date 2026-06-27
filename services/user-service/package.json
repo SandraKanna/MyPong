@@ -7,15 +7,11 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "migrate:up": "node-pg-migrate up",
-    "migrate:down": "node-pg-migrate down",
-    "migrate:create": "node-pg-migrate create",
+    "migrate:up": "node-pg-migrate up --migrations-table pgmigrations_user",
+    "migrate:down": "node-pg-migrate down --migrations-table pgmigrations_user",
+    "migrate:create": "node-pg-migrate create --migrations-table pgmigrations_user",
     "test": "NODE_ENV=test vitest run",
     "test:watch": "NODE_ENV=test vitest"
-  },
-  "node-pg-migrate": {
-    "migrationsTable": "pgmigrations",
-    "dir": "migrations"
   },
   "dependencies": {
     "fastify": "^5.8.5",

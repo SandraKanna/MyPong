@@ -10,9 +10,9 @@
 # Requires:
 #   - Full stack running: make up
 #   - auth-service migrations applied (for the users table FK):
-#       docker compose -p mypong exec auth-service npx node-pg-migrate up
+#       docker compose -p mypong exec auth-service npx node-pg-migrate up --migrations-table pgmigrations_auth
 #   - user-service migrations applied:
-#       docker compose -p mypong exec user-service npx node-pg-migrate up
+#       docker compose -p mypong exec user-service npx node-pg-migrate up --migrations-table pgmigrations_user
 #
 # Each run registers a new user in the users table (unique email by PID).
 # Rows are NOT cleaned up automatically — acceptable in dev.
