@@ -1,9 +1,10 @@
 import { Outlet } from 'react-router';
+import Navbar from '../shared/components/Navbar';
 
 export default function AppLayout() {
   return (
     <>
-      <nav className="bg-bg text-fg px-4 py-3">MyPong</nav>
+      <Navbar />
       <main className="bg-bg text-fg p-4">
         <Outlet />
       </main>
