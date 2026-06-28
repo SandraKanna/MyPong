@@ -16,11 +16,11 @@ Response `201`: `{ userId: number, email: string }`
 ### POST /api/auth/login
 
 Request: `{ email: string, password: string }`
-Response `200`: `{ accessToken: string, user: { userId: number, email: string } }`
+Response `200`: `{ accessToken: string }`
 
 Also sets the refresh token as an httpOnly cookie.
 
-> `user` is dummy data: a `dummy_user_profiles` table in auth-service, seeded with fake profiles, joined on login. Real source is `user-service` (Phase 2) — once it ships, this field comes from there instead and the dummy table is dropped.
+> auth-service never calls user-service. Profile data (username, avatar) is fetched separately via `GET /api/users/me` after login.
 
 ### POST /api/auth/refresh
 
@@ -31,3 +31,22 @@ Response `200`: `{ accessToken: string }`. Rotates the refresh cookie.
 
 No body; reads refresh token from cookie to revoke it.
 Response `204`, clears the refresh cookie.
+
+---
+
+## user-service
+
+Base path: `/api/users/*` (JWT required — gateway-api validates the Bearer token and injects `x-user-id`; user-service never decodes JWTs directly).
+
+### GET /api/users/me
+
+No body.
+Response `200`: `{ userId: number, username: string, avatar_url: string | null }`
+Response `404`: `{ error: 'Profile not found' }` — no profile row exists yet; the row is created on the first successful PATCH.
+
+### PATCH /api/users/me
+
+Request: `{ username: string }` — min 1 char, max 30 chars, alphanumeric + hyphens + underscores only.
+Response `200`: `{ userId: number, username: string, avatar_url: string | null }`
+Response `400`: `{ error: 'Invalid input', details: { username: string[] } }` — Zod validation failure.
+Response `409`: `{ error: 'Username already taken' }` — Postgres unique_violation on username column.
