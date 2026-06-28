@@ -18,6 +18,10 @@ export default function ProfilePage() {
   // result (server truth) should overwrite draft without conflicting with
   // the current page-level state machine.
   const [pageState, setPageState] = useState<PageState>({ phase: 'loading' });
+  // STUDY: setDraft is the setter React gives you from useState — calling it
+  // changes `draft` AND triggers a re-render. It's not a "draft mode"; `draft`
+  // is just the variable holding the input's current text. Here we overwrite it
+  // with the server's confirmed value after a successful save.
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
