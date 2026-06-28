@@ -14,6 +14,8 @@ export default function RegisterPage() {
     setError(null);
     try {
       await register(email, password);
+      // STUDY: No replace:true here — unlike login, pressing back after registering
+      // is reasonable (maybe the user wants to fix a typo in their email).
       void navigate('/login');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error inesperado');
