@@ -37,11 +37,16 @@ async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
-// STUDY: sharedRefresh deduplicates concurrent refresh calls. If two components
-// both get a 401 at the same time, the second call sees the in-flight promise
-// and joins it rather than firing a second /refresh request. This prevents the
-// refresh token from being consumed and rotated twice (which would invalidate
-// the first caller's new token).
+// STUDY: "single-flight" — only ONE real /refresh runs even if many calls hit
+// a 401 at once. The first caller finds refreshPromise === null, kicks off the
+// refresh, and stores that promise. Everyone after (2, 3, 50 callers) sees it's
+// not null and just awaits the SAME promise — no extra requests. Once it's done,
+// the variable resets to null so a later call can refresh again.
+// Why it's safe without a lock: JS is single-threaded and only pauses at `await`.
+// The null-check and the assignment run back-to-back with nothing slipping
+// between them, so two callers can't both start a refresh. (In a multi-threaded
+// language you'd need a real mutex here.) Without this, two refreshes would
+// rotate the token twice and leave one caller holding a dead token.
 export async function sharedRefresh(): Promise<boolean> {
   if (refreshPromise !== null) {
     return refreshPromise;
