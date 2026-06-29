@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [auth-service, gateway-api, user-service]
+        service: [auth-service, gateway-api, gateway-ws, user-service]
     defaults:
       run:
         working-directory: services/${{ matrix.service }}
@@ -54,7 +54,7 @@ jobs:
     needs: lint
     strategy:
       matrix:
-        service: [auth-service, gateway-api, user-service]
+        service: [auth-service, gateway-api, gateway-ws, user-service]
     defaults:
       run:
         working-directory: services/${{ matrix.service }}
@@ -79,7 +79,7 @@ jobs:
     needs: typecheck
     strategy:
       matrix:
-        service: [auth-service, gateway-api, user-service]
+        service: [auth-service, gateway-api, gateway-ws, user-service]
     defaults:
       run:
         working-directory: services/${{ matrix.service }}
@@ -104,7 +104,7 @@ jobs:
     needs: test
     strategy:
       matrix:
-        service: [auth-service, gateway-api, user-service]
+        service: [auth-service, gateway-api, gateway-ws, user-service]
     steps:
       - uses: actions/checkout@v4
 
