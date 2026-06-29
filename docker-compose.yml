@@ -24,9 +24,8 @@ services:
     depends_on:
       gateway-api:
         condition: service_healthy
-      # gateway-ws excluded from depends_on — no real Dockerfile yet
-      # (Phase 3). Re-add once it exists, so nginx doesn't depend on a
-      # service it can't build or start.
+      gateway-ws:
+        condition: service_healthy
     # TODO: healthcheck
 
   # ── Gateways (bridge frontend-net ↔ backend-net) ─────────────────────────────
@@ -68,14 +67,22 @@ services:
       context: .
       dockerfile: services/gateway-ws/Dockerfile
     expose:
-      - "4500" # NETWORK
+      - "4500"
+    # TODO: remove this ports mapping once testing via nginx /ws is the only path
+    ports: 
+      - "4500:4500"
     environment:
-      PORT: "4500" # CONFIG for Node
+      PORT: "4500"
       JWT_SECRET: ${JWT_SECRET}
     networks:
       - frontend-net
       - backend-net
-    # TODO: healthcheck
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4500/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # ── Backend services (backend-net only) ──────────────────────────────────────
 
