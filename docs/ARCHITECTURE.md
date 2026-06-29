@@ -27,7 +27,7 @@ Sole entry point for REST calls. Validates the JWT access token on every request
 
 ### gateway-ws
 
-Hub for all WebSocket traffic. The browser connects through nginx at `/ws`. game-service, matchmaking-service, tournament-service, and ia-bot-service each connect to it as clients rather than exposing their own ports. It routes messages both directions between browser and backend services. Holds `JWT_SECRET`, so it's expected to authenticate WebSocket connections the same way gateway-api authenticates REST ones. Sits on both networks.
+Hub for all WebSocket traffic. The browser connects through nginx at `/ws`. game-service, match-service, tournament-service, and ia-bot-service each connect to it as clients rather than exposing their own ports. It routes messages both directions between browser and backend services. Holds `JWT_SECRET`, so it authenticates WebSocket connections the same way gateway-api authenticates REST ones. Sits on both networks.
 
 ---
 
@@ -39,15 +39,15 @@ Owns the full credential lifecycle: registration, login, issuing access and refr
 
 ### user-service
 
-Owns public profile data: display name, stats, avatar. Writes to the avatars_data volume (nginx only reads from it). Never touches passwords or tokens, never queries auth-service's tables directly (it calls auth-service's API if it needs anything from there).
+Owns public profile data: display name, stats, avatar. Writes to the avatars_data volume (nginx only reads from it). Never touches passwords or tokens, and never talks to auth-service at all — identity arrives pre-validated via the x-user-id header injected by gateway-api, so there's no case where it would need to call auth-service's API.
 
 ### game-service
 
-Owns the physics and lifecycle of a single match: ball, paddles, goals, end conditions. Connects to gateway-ws as a client, receives input, pushes state updates. The match state lives in memory while the match is in progress, not persisted, so no need for a database. Completed results are meant to land in a matches table eventually. How it receives match assignments from matchmaking-service isn't modeled yet, but it's expected to happen through gateway-ws messages, not direct service calls.
+Owns the real-time physics of a match while it's in progress: ball, paddles, score, end conditions. A pure WebSocket client with no database and no persistence — match state lives in memory only, for the lifetime of the connection. How it receives match assignments from match-service, and how it reports the final result back, isn't modeled yet, but it's expected to happen through gateway-ws messages, not direct service calls.
 
-### matchmaking-service
+### match-service
 
-Pairs waiting players and starts a match. Connects to gateway-ws as a client to receive join/cancel requests and announce a pairing. Has DATABASE_URL — queue state needs to survive a restart. How it hands a new pairing off to game-service isn't modeled yet; expected to go through gateway-ws, same as above.
+Owns the full lifecycle of a match outside of gameplay itself: pairing waiting players, assigning a matchId, and recording the final result once a match ends. Connects to gateway-ws as a client to receive join/cancel requests and announce a pairing. Has DATABASE_URL — both the match queue and match history need to survive a restart. How it hands a new pairing off to game-service, and how it receives the final result back, isn't modeled yet; expected to go through gateway-ws, same as above.
 
 ### tournament-service
 
