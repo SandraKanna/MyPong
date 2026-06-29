@@ -37,7 +37,10 @@ services:
       dockerfile: services/gateway-api/Dockerfile
     expose:
       - "4000"
-    # TODO: remove this ports mapping once nginx is implemented
+    # TODO: remove this ports mapping once nothing hits gateway-api directly —
+    # currently still required by: native Vite dev proxy (/api → :4010 in
+    # vite.config.ts) and the auth-service/gateway-api smoke tests. Revisit in
+    # Fase 7 cleanup pass, or sooner if those paths get rerouted through nginx.
     ports:
       - "4010:4000"
     environment:
