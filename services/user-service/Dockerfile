@@ -33,6 +33,13 @@ COPY --from=builder /app/services/user-service/node_modules ./node_modules
 COPY services/user-service/package.json ./
 COPY services/user-service/migrations/ ./migrations/
 
+# Create the avatar storage directory and give the non-root user ownership BEFORE
+# switching away from root. Docker named volumes are initialised from the image's
+# directory contents the first time they are mounted — so the ownership set here
+# propagates to a fresh avatars_data volume. Without this, Docker Engine creates
+# the volume owned by root and the node process cannot write to it.
+RUN mkdir -p /var/www/avatars && chown -R node:node /var/www/avatars
+
 # Run as non-root (node user is built into node:alpine)
 USER node
 

@@ -118,6 +118,47 @@ describe('userProxyRoutes', () => {
     expect((init.headers as Record<string, string>)['x-user-id']).toBe('42');
   });
 
+  // ── Multipart passthrough ───────────────────────────────────────────────────
+
+  it('forwards multipart body as raw bytes with original content-type (boundary preserved)', async () => {
+    const boundary = 'test-boundary-xyz';
+    const multipartBody = Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="file"; filename="avatar.jpg"\r\n` +
+      `Content-Type: application/octet-stream\r\n` +
+      `\r\n` +
+      `fake-image-bytes\r\n` +
+      `--${boundary}--\r\n`,
+    );
+    const incomingContentType = `multipart/form-data; boundary=${boundary}`;
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('{"userId":42,"username":"alice","avatar_url":"/avatars/42.webp"}', { status: 200 }),
+    );
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/users/me/avatar',
+      headers: {
+        authorization: `Bearer ${validToken(42)}`,
+        'content-type': incomingContentType,
+      },
+      payload: multipartBody,
+    });
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [calledUrl, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    // URL stripped correctly
+    expect(calledUrl).toBe('http://user-service:4002/me/avatar');
+    // Content-type must travel verbatim so user-service can find the boundary
+    expect((init.headers as Record<string, string>)['content-type']).toBe(incomingContentType);
+    // Body must be the raw Buffer, not JSON.stringify'd
+    expect(Buffer.isBuffer(init.body)).toBe(true);
+    expect(init.body as Buffer).toEqual(multipartBody);
+    // x-user-id still injected
+    expect((init.headers as Record<string, string>)['x-user-id']).toBe('42');
+  });
+
   // ── Upstream failure → 502 ──────────────────────────────────────────────────
 
   it('returns 502 with generic body and logs service/url/error when fetch throws', async () => {

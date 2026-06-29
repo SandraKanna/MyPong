@@ -50,3 +50,20 @@ Request: `{ username: string }` — min 1 char, max 30 chars, alphanumeric + hyp
 Response `200`: `{ userId: number, username: string, avatar_url: string | null }`
 Response `400`: `{ error: 'Invalid input', details: { username: string[] } }` — Zod validation failure.
 Response `409`: `{ error: 'Username already taken' }` — Postgres unique_violation on username column.
+
+### POST /api/users/me/avatar
+
+Multipart form upload. Field name: `file`. Do NOT set Content-Type manually — the browser/client must set it (including the boundary).
+
+Validation: file content (magic bytes), not the client-supplied MIME type or filename.
+Accepted types: JPEG, PNG, WebP, GIF.
+Max file size: 5 MB. Exceeding this is caught by gateway-api's body limit before user-service is reached (or by @fastify/multipart at user-service if the gateway lets it through).
+Processing: resized to max 512×512 (aspect ratio preserved), re-encoded as WebP. Re-encoding sanitises the file — the output is generated from the decoded bitmap, discarding any embedded metadata.
+Storage: `{AVATARS_DIR}/{userId}.webp` — filename is the validated userId, never the client-supplied filename (closes path traversal). Overwrites the previous avatar; no delete step.
+
+Response `200`: `{ userId: number, username: string, avatar_url: string | null }` — same shape as GET/PATCH /me. `avatar_url` will be `/avatars/{userId}.webp`.
+Response `400`: `{ error: 'No file provided' }` — multipart request with no file part.
+Response `400`: `{ error: 'Unsupported image type — accepted: JPEG, PNG, WebP, GIF' }` — magic byte check failed.
+Response `401`: missing or invalid `x-user-id` header.
+Response `413`: `{ error: 'File too large (max 5 MB)' }` — fileSize limit exceeded.
+Response `422`: `{ error: 'Profile not found — set a username first' }` — no profile row exists (UPDATE affected 0 rows). Avatar upload requires a prior PATCH /me to create the profile row.
