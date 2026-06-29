@@ -7,9 +7,12 @@ export const userProxyRoutes: FastifyPluginCallback = (fastify, _opts, done) => 
     const upstreamPath = request.url.replace('/api/users', '');
     const upstreamUrl = config.USER_SERVICE_URL + upstreamPath;
 
-    // Multipart bodies are buffered as raw bytes by the content-type parser in
-    // app.ts. Forward them unchanged so user-service can parse the form fields
-    // and boundary itself. JSON bodies use the existing stringify path.
+    // STUDY: request.body is typed as unknown and can be either a Buffer (multipart,
+    // buffered by the custom parser in app.ts) or a parsed object (JSON, handled by
+    // Fastify's built-in parser). We detect which by checking the Content-Type header
+    // and route to the appropriate proxyRequest code path. Checking the header rather
+    // than instanceof Buffer keeps the type narrowing explicit and avoids relying on
+    // Buffer being the only non-object body shape that could appear here.
     const contentType = request.headers['content-type'] ?? '';
     const isMultipart = contentType.startsWith('multipart/form-data');
 
