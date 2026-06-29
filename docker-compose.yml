@@ -113,6 +113,7 @@ services:
     environment:
       PORT: "4002"
       DATABASE_URL: ${DATABASE_URL}
+      AVATARS_DIR: /var/www/avatars
     volumes:
       - avatars_data:/var/www/avatars
     networks:

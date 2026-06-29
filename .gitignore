@@ -47,6 +47,9 @@ ehthumbs.db
 # TLS certs — generated locally, never committed
 nginx/certs/
 
+# Local avatar store for native dev (Docker uses avatars_data volume)
+avatars-dev/
+
 # Misc
 .cache/
 tmp/

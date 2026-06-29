@@ -27,3 +27,15 @@ export async function upsertProfile(userId: number, username: string): Promise<U
   );
   return rows[0];
 }
+
+// Plain UPDATE — intentionally not an upsert. Returns null if no profile row exists,
+// which the route handler maps to 422. This preserves the invariant that profile rows
+// are only created by the first PATCH /me (username set), never by avatar upload.
+export async function updateAvatarUrl(userId: number, avatarUrl: string): Promise<UserProfile | null> {
+  const { rows, rowCount } = await db.query<UserProfile>(
+    `UPDATE user_profiles SET avatar_url = $1 WHERE user_id = $2 RETURNING *`,
+    [avatarUrl, userId],
+  );
+  if (!rowCount) return null;
+  return rows[0];
+}

@@ -39,3 +39,22 @@ export async function patchProfile(username: string): Promise<UserProfile> {
   }
   return res.json() as Promise<UserProfile>;
 }
+
+// STUDY: FormData + fetch (via apiClient) — do NOT set Content-Type manually.
+// When you pass FormData as the body, the browser automatically sets
+// Content-Type: multipart/form-data; boundary=<generated-boundary>.
+// If you set it manually you omit the boundary, and the server can't parse
+// the body (it won't know where one part ends and the next begins).
+export async function uploadAvatar(file: File): Promise<UserProfile> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await apiClient('/api/users/me/avatar', {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Failed to upload avatar');
+  }
+  return res.json() as Promise<UserProfile>;
+}

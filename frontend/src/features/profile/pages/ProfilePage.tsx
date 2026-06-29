@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { getProfile, patchProfile } from '../api/profile';
+import { useState, useEffect, useRef } from 'react';
+import { getProfile, patchProfile, uploadAvatar } from '../api/profile';
 
 // STUDY: A discriminated union (tagged by `phase`) models the page lifecycle
 // explicitly. TypeScript narrows the type when you check `pageState.phase`,
@@ -9,7 +9,7 @@ import { getProfile, patchProfile } from '../api/profile';
 type PageState =
   | { phase: 'loading' }
   | { phase: 'error'; message: string }
-  | { phase: 'exists'; username: string }
+  | { phase: 'exists'; username: string; avatarUrl: string | null }
   | { phase: 'not-found' };
 
 export default function ProfilePage() {
@@ -25,6 +25,18 @@ export default function ProfilePage() {
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  // STUDY: avatarVersion is a timestamp appended to the avatar URL as a cache-buster.
+  // Browsers aggressively cache images by URL. Since the avatar filename never changes
+  // ({userId}.webp overwrites in place), without a changing query string the browser
+  // would show the old image after an upload. Setting ?v=<timestamp> makes the URL
+  // unique on each upload, forcing a fresh fetch.
+  const [avatarVersion, setAvatarVersion] = useState(Date.now);
+  // STUDY: useRef gives a stable reference to a DOM element across re-renders without
+  // triggering a re-render itself when it changes. Here it lets the "Upload avatar"
+  // button programmatically click the hidden file input (which opens the OS picker).
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // STUDY: useEffect callbacks must return void or a cleanup function, not a
@@ -39,7 +51,7 @@ export default function ProfilePage() {
           // We treat it as a valid first-time-setup state, not an error.
           setPageState({ phase: 'not-found' });
         } else {
-          setPageState({ phase: 'exists', username: profile.username });
+          setPageState({ phase: 'exists', username: profile.username, avatarUrl: profile.avatar_url });
           // STUDY: Initialize the input with the existing username so the user
           // sees their current value, not a blank field.
           setDraft(profile.username);
@@ -60,7 +72,7 @@ export default function ProfilePage() {
       const profile = await patchProfile(draft);
       // STUDY: Transition 'not-found' → 'exists' on first save — same form
       // handles both create and update (the API endpoint is an upsert).
-      setPageState({ phase: 'exists', username: profile.username });
+      setPageState({ phase: 'exists', username: profile.username, avatarUrl: profile.avatar_url });
       // STUDY: Update draft from the server response, not from `draft` itself.
       // If the server normalizes the value (e.g., trims whitespace) the input
       // reflects the actual saved value rather than what the user typed.
@@ -69,6 +81,26 @@ export default function ProfilePage() {
       setSaveError(e instanceof Error ? e.message : 'Failed to save');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleAvatarChange(file: File) {
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const profile = await uploadAvatar(file);
+      // Update the avatar URL in state and bump the cache-buster so the browser
+      // fetches the new file instead of serving the stale cached version.
+      setPageState((prev) =>
+        prev.phase === 'exists'
+          ? { ...prev, avatarUrl: profile.avatar_url }
+          : prev,
+      );
+      setAvatarVersion(Date.now());
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : 'Failed to upload avatar');
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -92,6 +124,41 @@ export default function ProfilePage() {
       </h1>
       {isNew && (
         <p className="text-muted">You haven&apos;t set a username yet.</p>
+      )}
+      {!isNew && (
+        <div className="flex flex-col gap-2">
+          {pageState.avatarUrl !== null && (
+            <img
+              src={`${pageState.avatarUrl}?v=${avatarVersion.toString()}`}
+              alt="Avatar"
+              className="w-24 h-24 rounded-full object-cover"
+            />
+          )}
+          {/* Hidden file input — triggered by the button below via ref */}
+          <input
+            data-testid="avatar-input"
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleAvatarChange(file);
+            }}
+          />
+          <button
+            onClick={() => { fileInputRef.current?.click(); }}
+            disabled={uploading}
+            className="bg-surface text-fg px-4 py-2 rounded disabled:opacity-50 self-start"
+          >
+            {uploading
+              ? 'Uploading…'
+              : pageState.avatarUrl !== null
+                ? 'Change avatar'
+                : 'Upload avatar'}
+          </button>
+          {uploadError !== null && <p className="text-muted">{uploadError}</p>}
+        </div>
       )}
       <div className="flex flex-col gap-2">
         <label htmlFor="username" className="text-fg text-sm">
