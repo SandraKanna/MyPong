@@ -88,8 +88,10 @@ export const userRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       return reply.status(400).send({ error: 'No file provided' });
     }
 
-    // Buffer the upload. @fastify/multipart throws an error with statusCode 413
-    // if the stream exceeds limits.fileSize before toBuffer() completes.
+    // STUDY: @fastify/multipart signals a size limit breach by throwing an error
+    // with a statusCode property (not an instanceof a named class). We cast to
+    // { statusCode?: number } instead of checking instanceof so we don't depend
+    // on the library's internal error class — a structural check is more robust.
     let raw: Buffer;
     try {
       raw = await data.toBuffer();
@@ -106,9 +108,11 @@ export const userRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       return reply.status(400).send({ error: 'Unsupported image type — accepted: JPEG, PNG, WebP, GIF' });
     }
 
-    // Re-encode to WebP via sharp. This also sanitises the file: the output is
-    // generated from the decoded pixel bitmap, discarding any embedded metadata
-    // or steganographic payloads in the original.
+    // STUDY: Re-encoding via sharp is security sanitization, not just format
+    // conversion. sharp decodes the input to a raw pixel bitmap, then encodes
+    // a fresh WebP from those pixels. The output contains nothing from the
+    // original file except color data — EXIF, ICC profiles, XMP, comment blocks,
+    // and any steganographic payloads are discarded by construction.
     const webpBuffer = await sharp(raw)
       .resize(512, 512, {
         fit: 'inside',          // preserve aspect ratio, neither side exceeds 512
@@ -117,19 +121,21 @@ export const userRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       .webp({ quality: 80 })
       .toBuffer();
 
-    // Check profile exists BEFORE writing to disk. updateAvatarUrl is a plain UPDATE
-    // that returns null when no row matches — we map that to 422 to enforce "set a
-    // username first". Doing the DB write before the file write means a missing profile
-    // never produces a dangling file on disk.
+    // STUDY: DB write before file write — not the other way around. If we wrote the
+    // file first and then found no profile row, we'd have a file on disk with no DB
+    // record pointing to it (a dangling file). Checking the DB first means that on
+    // any early return (422 or upstream error) the disk is untouched.
     const avatarUrl = `/avatars/${userId}.webp`;
     const profile = await userService.updateAvatarUrl(userId, avatarUrl);
     if (!profile) {
       return reply.status(422).send({ error: 'Profile not found — set a username first' });
     }
 
-    // Filename is derived from the validated userId, never from the client-supplied
-    // filename — this closes path traversal. Same name overwrites the previous avatar,
-    // so cleanup is free by construction.
+    // STUDY: Filename derived from userId (server-controlled), never from the
+    // client-supplied filename — this closes path traversal. A client can't send
+    // filename="../../etc/passwd" and expect the server to honor it. The fixed
+    // pattern ({userId}.webp) also makes cleanup free: uploading a new avatar
+    // overwrites the old file by construction, no orphan cleanup needed.
     const filePath = path.join(config.AVATARS_DIR, `${userId}.webp`);
     await fs.writeFile(filePath, webpBuffer);
 

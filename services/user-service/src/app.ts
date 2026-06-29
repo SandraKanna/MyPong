@@ -2,9 +2,11 @@ import Fastify, { FastifyInstance } from 'fastify';
 import multipart from '@fastify/multipart';
 import { userRoutes } from './routes/user.routes';
 
-// Maximum avatar upload size enforced at the multipart layer before any disk I/O.
-// 5 MB gives plenty of headroom for large source images while making single-request
-// DoS implausible. Imported by tests to construct boundary payloads.
+// STUDY: 5 MB cap set here at the multipart layer, not inside the route handler.
+// @fastify/multipart throws before any route code runs if the stream exceeds fileSize,
+// so the handler never receives the bytes — single-request DoS is cut off at the
+// earliest point. Exported so tests can construct payloads at exactly this boundary
+// without hardcoding a magic number.
 export const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -16,7 +18,9 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   await fastify.register(multipart, {
     limits: {
-      files: 1,                    // reject requests with more than one file part
+      // STUDY: files: 1 rejects multi-file requests immediately — a client can't
+      // force the server to buffer many large parts by sending a malformed multipart.
+      files: 1,
       fileSize: AVATAR_MAX_BYTES,
     },
   });

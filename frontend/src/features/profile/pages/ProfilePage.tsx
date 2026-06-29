@@ -125,6 +125,10 @@ export default function ProfilePage() {
       {isNew && (
         <p className="text-muted">You haven&apos;t set a username yet.</p>
       )}
+      {/* STUDY: Avatar UI is gated on !isNew because avatar upload requires a
+          profile row to already exist (the backend enforces this via 422). Showing
+          an upload button before the user has set a username would lead to a
+          guaranteed rejection — better to not offer the option at all. */}
       {!isNew && (
         <div className="flex flex-col gap-2">
           {pageState.avatarUrl !== null && (
@@ -134,7 +138,15 @@ export default function ProfilePage() {
               className="w-24 h-24 rounded-full object-cover"
             />
           )}
-          {/* Hidden file input — triggered by the button below via ref */}
+          {/* STUDY: Hidden <input type="file"> + ref is the standard pattern for
+              custom-styled file pickers. The browser only opens its OS file picker
+              when a file input is clicked — there's no other API for it. We hide
+              the ugly default input and trigger its click() via the ref from a
+              styled button. `accept` is a hint to the OS picker (not a security
+              control — the backend validates via magic bytes regardless). */}
+          {/* STUDY: e.target.files is a FileList (not an Array), so we index it
+              with [0]. The optional chain (?.) handles the case where the user
+              opens the picker and cancels without selecting anything. */}
           <input
             data-testid="avatar-input"
             ref={fileInputRef}

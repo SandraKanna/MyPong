@@ -1,3 +1,8 @@
+// STUDY: Two code paths for body forwarding. JSON bodies are stringify-able objects.
+// Multipart bodies are raw Buffers — JSON.stringify(Buffer) produces the object
+// representation {"type":"Buffer","data":[...]}, not the binary bytes, which destroys
+// the boundary and makes the upstream unable to parse the form. rawBody/rawContentType
+// carry the opaque bytes and the original content-type (boundary included) unchanged.
 export interface ProxyOptions {
   method: string;
   // For JSON bodies (most routes): set body, leave rawBody/rawContentType unset.
