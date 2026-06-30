@@ -1,7 +1,8 @@
 import http from 'node:http';
 import jwt from 'jsonwebtoken';
-import { WebSocketServer, type WebSocket } from 'ws';
+import { WebSocketServer, type WebSocket, type RawData } from 'ws';
 import { config } from './config';
+import type { WsEnvelope } from '@mypong/types';
 
 // 4000-4999 are application-reserved close codes per RFC 6455.
 // 4001 = Unauthorized (bad/missing/wrong-type token, or auth timeout).
@@ -9,9 +10,28 @@ import { config } from './config';
 const CLOSE_UNAUTHORIZED = 4001;
 const CLOSE_BAD_REQUEST  = 4003;
 
+// Service names allowed to register. Extend when new WS-client services land.
+const KNOWN_SERVICES = new Set(['game-service', 'match-service']);
+
+// ── Message types ─────────────────────────────────────────────────────────────
+
 interface AuthMessage {
   type: 'auth';
   payload: { token: string };
+}
+
+interface ServiceRegisterMessage {
+  type: 'service:register';
+  service: string;
+  token: string;
+}
+
+function rawDataToString(data: RawData): string {
+  return Buffer.isBuffer(data)
+    ? data.toString('utf8')
+    : Array.isArray(data)
+      ? Buffer.concat(data).toString('utf8')
+      : Buffer.from(data).toString('utf8');
 }
 
 function isAuthMessage(value: unknown): value is AuthMessage {
@@ -22,6 +42,16 @@ function isAuthMessage(value: unknown): value is AuthMessage {
   const p = v['payload'] as Record<string, unknown>;
   return typeof p['token'] === 'string';
 }
+
+function isServiceRegisterMessage(value: unknown): value is ServiceRegisterMessage {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return v['type'] === 'service:register'
+    && typeof v['service'] === 'string'
+    && typeof v['token'] === 'string';
+}
+
+// ── Exported types ────────────────────────────────────────────────────────────
 
 export interface ServerInstance {
   httpServer: http.Server;
@@ -34,8 +64,14 @@ export interface BuildServerOptions {
   authTimeoutMs?: number;
 }
 
+// ── Server ────────────────────────────────────────────────────────────────────
+
 export function buildServer(opts: BuildServerOptions = {}): ServerInstance {
   const authTimeoutMs = opts.authTimeoutMs ?? 5_000;
+
+  // Scoped to this buildServer() call so test runs are isolated.
+  const services = new Map<string, WebSocket>(); // serviceName → socket
+  const browsers = new Map<number, WebSocket>(); // userId → socket
 
   const httpServer = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
@@ -50,25 +86,16 @@ export function buildServer(opts: BuildServerOptions = {}): ServerInstance {
   const wss = new WebSocketServer({ server: httpServer });
 
   wss.on('connection', (socket: WebSocket) => {
-    // Start auth clock. If the client doesn't send a valid auth message in
-    // time, close the connection. A connected-but-unauthenticated socket
-    // consumes memory and a file descriptor.
+    // Start auth clock. If the client doesn't identify itself in time, drop it.
+    // A connected-but-unauthenticated socket consumes memory and a file descriptor.
     const timer = setTimeout(() => {
       socket.close(CLOSE_UNAUTHORIZED, 'Unauthorized');
     }, authTimeoutMs);
 
-    socket.once('message', (data) => {
+    socket.once('message', (data: RawData) => {
       clearTimeout(timer);
 
-      // RawData = Buffer | ArrayBuffer | Buffer[]. Normalize to a string before
-      // parsing. Text WebSocket frames from browsers always arrive as Buffer,
-      // but the type covers all three variants.
-      const raw = Buffer.isBuffer(data)
-        ? data.toString('utf8')
-        : Array.isArray(data)
-          ? Buffer.concat(data).toString('utf8')
-          : Buffer.from(data).toString('utf8');
-
+      const raw = rawDataToString(data);
       let msg: unknown;
       try {
         msg = JSON.parse(raw) as unknown;
@@ -77,32 +104,76 @@ export function buildServer(opts: BuildServerOptions = {}): ServerInstance {
         return;
       }
 
-      if (!isAuthMessage(msg)) {
-        socket.close(CLOSE_BAD_REQUEST, 'Bad Request');
-        return;
-      }
-
-      let decoded: jwt.JwtPayload;
-      try {
-        const result = jwt.verify(msg.payload.token, config.JWT_SECRET, {
-          algorithms: ['HS256'],
-        });
-        // Defense-in-depth: verify `type` claim even after signature check.
-        // Guards against refresh tokens being used in place of access tokens
-        // if both secrets ever coincide by misconfiguration.
-        if (typeof result === 'string' || result['type'] !== 'access') {
+      if (isServiceRegisterMessage(msg)) {
+        // Internal service connection: validate pre-shared secret and service name.
+        if (msg.token !== config.INTERNAL_SERVICE_SECRET || !KNOWN_SERVICES.has(msg.service)) {
           socket.close(CLOSE_UNAUTHORIZED, 'Unauthorized');
           return;
         }
-        decoded = result;
-      } catch {
-        socket.close(CLOSE_UNAUTHORIZED, 'Unauthorized');
+        const serviceName = msg.service;
+        services.set(serviceName, socket);
+        socket.send(JSON.stringify({ type: 'registered' }));
+
+        // Service → browser fan-out: forward messages that carry `to: number[]`
+        // to the listed userIds, stripping `to` before delivery.
+        socket.on('message', (svcData: RawData) => {
+          let svcMsg: unknown;
+          try { svcMsg = JSON.parse(rawDataToString(svcData)) as unknown; } catch { return; }
+          const envelope = svcMsg as WsEnvelope;
+          if (!Array.isArray(envelope.to)) return;
+          const { to, ...rest } = envelope;
+          const outgoing = JSON.stringify(rest);
+          for (const uid of to) {
+            browsers.get(uid)?.send(outgoing);
+          }
+        });
+
+        socket.on('close', () => { services.delete(serviceName); });
         return;
       }
 
-      socket.send(
-        JSON.stringify({ type: 'connected', payload: { userId: decoded['sub'] } }),
-      );
+      if (isAuthMessage(msg)) {
+        // Browser connection: validate access JWT.
+        let decoded: jwt.JwtPayload;
+        try {
+          const result = jwt.verify(msg.payload.token, config.JWT_SECRET, {
+            algorithms: ['HS256'],
+          });
+          // Defense-in-depth: reject refresh tokens even if both secrets coincide.
+          if (typeof result === 'string' || result['type'] !== 'access') {
+            socket.close(CLOSE_UNAUTHORIZED, 'Unauthorized');
+            return;
+          }
+          decoded = result;
+        } catch {
+          socket.close(CLOSE_UNAUTHORIZED, 'Unauthorized');
+          return;
+        }
+
+        const userId = Number(decoded['sub']);
+        browsers.set(userId, socket);
+        socket.send(JSON.stringify({ type: 'connected', payload: { userId: decoded['sub'] } }));
+
+        // Browser → service routing: extract prefix from type before ':', look up
+        // the registered service by `${prefix}-service`, inject userId.
+        // gateway-ws overwrites any userId the client may have included — it is
+        // the sole authority on identity.
+        socket.on('message', (brData: RawData) => {
+          let brMsg: unknown;
+          try { brMsg = JSON.parse(rawDataToString(brData)) as unknown; } catch { return; }
+          const envelope = brMsg as WsEnvelope;
+          if (typeof envelope.type !== 'string') return;
+          const prefix = envelope.type.split(':')[0];
+          const target = services.get(`${prefix}-service`);
+          if (!target) return;
+          target.send(JSON.stringify({ ...envelope, userId }));
+        });
+
+        socket.on('close', () => { browsers.delete(userId); });
+        return;
+      }
+
+      socket.close(CLOSE_BAD_REQUEST, 'Bad Request');
     });
   });
 

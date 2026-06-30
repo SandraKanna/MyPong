@@ -3,6 +3,7 @@ import { z } from 'zod';
 const envSchema = z.object({
   PORT: z.string().regex(/^\d+$/).transform(Number),
   JWT_SECRET: z.string().min(32),
+  INTERNAL_SERVICE_SECRET: z.string().min(32),
 });
 
 const parsed = envSchema.safeParse(process.env);

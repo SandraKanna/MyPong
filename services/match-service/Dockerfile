@@ -11,6 +11,7 @@ RUN npm ci
 
 COPY services/match-service/tsconfig.json ./
 COPY services/match-service/src/ ./src/
+COPY shared/types/ /app/shared/types/
 RUN npm run build
 
 RUN npm ci --omit=dev

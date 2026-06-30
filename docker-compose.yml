@@ -74,6 +74,7 @@ services:
     environment:
       PORT: "4500"
       JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
     networks:
       - frontend-net
       - backend-net
@@ -169,10 +170,13 @@ services:
     environment:
       PORT: "4502"
       DATABASE_URL: ${DATABASE_URL}
+      GATEWAY_WS_URL: ws://gateway-ws:4500
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
     networks:
       - backend-net
     depends_on:
+      gateway-ws:
+        condition: service_healthy
       postgres:
         condition: service_healthy
     healthcheck:

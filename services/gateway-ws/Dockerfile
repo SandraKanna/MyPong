@@ -11,6 +11,7 @@ RUN npm ci
 
 COPY services/gateway-ws/tsconfig.json ./
 COPY services/gateway-ws/src/ ./src/
+COPY shared/types/ /app/shared/types/
 RUN npm run build
 
 RUN npm ci --omit=dev

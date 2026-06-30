@@ -15,7 +15,5 @@ export function buildServer(): ServerInstance {
     res.end();
   });
 
-  // WS client connection to gateway-ws initialised here in the next PR.
-
   return { httpServer };
 }

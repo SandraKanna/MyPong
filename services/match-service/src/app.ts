@@ -15,7 +15,6 @@ export function buildServer(): ServerInstance {
     res.end();
   });
 
-  // WS client connection to gateway-ws and match lifecycle logic added in next commit.
 
   return { httpServer };
 }
