@@ -25,6 +25,7 @@ ENV NODE_ENV=production
 COPY --from=builder /app/services/match-service/dist ./dist
 COPY --from=builder /app/services/match-service/node_modules ./node_modules
 COPY services/match-service/package.json ./
+COPY services/match-service/migrations/ ./migrations/
 
 USER node
 
