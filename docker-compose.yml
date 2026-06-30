@@ -142,13 +142,23 @@ services:
     build:
       context: .
       dockerfile: services/game-service/Dockerfile
+    expose:
+      - "4501"
     environment:
+      PORT: "4501"
       GATEWAY_WS_URL: ws://gateway-ws:4500
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
     networks:
       - backend-net
     depends_on:
-      - gateway-ws
-    # TODO: healthcheck
+      gateway-ws:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4501/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   matchmaking-service:
     build:
