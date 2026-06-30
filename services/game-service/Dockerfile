@@ -25,7 +25,6 @@ ENV NODE_ENV=production
 COPY --from=builder /app/services/game-service/dist ./dist
 COPY --from=builder /app/services/game-service/node_modules ./node_modules
 COPY services/game-service/package.json ./
-COPY services/game-service/migrations/ ./migrations/
 
 USER node
 

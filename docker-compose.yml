@@ -146,14 +146,11 @@ services:
       - "4501"
     environment:
       PORT: "4501"
-      DATABASE_URL: ${DATABASE_URL}
       GATEWAY_WS_URL: ws://gateway-ws:4500
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
     networks:
       - backend-net
     depends_on:
-      postgres:
-        condition: service_healthy
       gateway-ws:
         condition: service_healthy
     healthcheck:
