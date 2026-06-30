@@ -160,19 +160,27 @@ services:
       retries: 5
       start_period: 15s
 
-  matchmaking-service:
+  match-service:
     build:
       context: .
-      dockerfile: services/matchmaking-service/Dockerfile
+      dockerfile: services/match-service/Dockerfile
+    expose:
+      - "4502"
     environment:
-      GATEWAY_WS_URL: ws://gateway-ws:4500
+      PORT: "4502"
       DATABASE_URL: ${DATABASE_URL}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
     networks:
       - backend-net
     depends_on:
-      - gateway-ws
-      - postgres
-    # TODO: healthcheck
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4502/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   tournament-service:
     build:
