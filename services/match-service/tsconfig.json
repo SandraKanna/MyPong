@@ -3,7 +3,10 @@
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist",
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@mypong/types": ["../../shared/types/index.d.ts"]
+    }
   },
   "include": ["src/**/*"]
 }

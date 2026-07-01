@@ -11,6 +11,7 @@ RUN npm ci
 
 COPY services/game-service/tsconfig.json ./
 COPY services/game-service/src/ ./src/
+COPY shared/types/ /app/shared/types/
 RUN npm run build
 
 RUN npm ci --omit=dev
@@ -28,6 +29,7 @@ COPY services/game-service/package.json ./
 
 USER node
 
-EXPOSE 4501
+HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=5 \
+  CMD test -f /tmp/healthy
 
 CMD ["node", "dist/index.js"]
