@@ -114,18 +114,23 @@ export function buildServer(opts: BuildServerOptions = {}): ServerInstance {
         services.set(serviceName, socket);
         socket.send(JSON.stringify({ type: 'registered' }));
 
-        // Service → browser fan-out: forward messages that carry `to: number[]`
-        // to the listed userIds, stripping `to` before delivery.
+        // Service → browser fan-out (`to: number[]`): strip `to`, deliver to each userId.
+        // Service → service routing (no `to`): route by type prefix, no mutation.
         socket.on('message', (svcData: RawData) => {
           let svcMsg: unknown;
           try { svcMsg = JSON.parse(rawDataToString(svcData)) as unknown; } catch { return; }
           const envelope = svcMsg as WsEnvelope;
-          if (!Array.isArray(envelope.to)) return;
-          const { to, ...rest } = envelope;
-          const outgoing = JSON.stringify(rest);
-          for (const uid of to) {
-            browsers.get(uid)?.send(outgoing);
+          if (Array.isArray(envelope.to)) {
+            const { to, ...rest } = envelope;
+            const outgoing = JSON.stringify(rest);
+            for (const uid of to) {
+              browsers.get(uid)?.send(outgoing);
+            }
+            return;
           }
+          if (typeof envelope.type !== 'string') return;
+          const prefix = envelope.type.split(':')[0];
+          services.get(`${prefix}-service`)?.send(JSON.stringify(envelope));
         });
 
         socket.on('close', () => { services.delete(serviceName); });

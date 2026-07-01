@@ -225,3 +225,57 @@ describe('gateway-ws — service→browser fan-out', () => {
     expect(instance.wss.clients.size).toBeGreaterThan(0);
   });
 });
+
+describe('gateway-ws — service→service routing', () => {
+  let instance: ServerInstance;
+  let port: number;
+
+  beforeEach(async () => {
+    instance = buildServer({ authTimeoutMs: 100 });
+    await new Promise<void>((resolve) => { instance.httpServer.listen(0, resolve); });
+    port = (instance.httpServer.address() as { port: number }).port;
+  });
+
+  afterEach(async () => {
+    for (const client of instance.wss.clients) { client.terminate(); }
+    await new Promise<void>((resolve) => {
+      instance.wss.close(() => { instance.httpServer.close(() => { resolve(); }); });
+    });
+  });
+
+  it('routes a no-to message to the target service with type and payload unchanged', async () => {
+    const matchSvc  = await registerService(port, 'match-service');
+    const gameSvc   = await registerService(port, 'game-service');
+
+    const received = onceMessage(gameSvc);
+    matchSvc.send(JSON.stringify({ type: 'game:assign', payload: { matchId: 99 } }));
+
+    expect(await received).toEqual({ type: 'game:assign', payload: { matchId: 99 } });
+  });
+
+  it('drops a no-to message silently when the target service is not registered', async () => {
+    const matchSvc = await registerService(port, 'match-service');
+    // game-service is NOT registered
+
+    matchSvc.send(JSON.stringify({ type: 'game:assign', payload: { matchId: 99 } }));
+
+    // No error thrown; sending service stays connected.
+    await new Promise<void>((resolve) => { setTimeout(resolve, 50); });
+    expect(matchSvc.readyState).toBe(WebSocket.OPEN);
+  });
+
+  it('regression: to-array fan-out to browsers is unaffected', async () => {
+    const gameSvc  = await registerService(port, 'game-service');
+    const browser42 = await connectBrowser(port, 42);
+    const browser17 = await connectBrowser(port, 17);
+
+    const msg42 = onceMessage(browser42);
+    const msg17 = onceMessage(browser17);
+
+    gameSvc.send(JSON.stringify({ type: 'game:state', to: [42, 17], payload: { x: 1 } }));
+
+    const expected = { type: 'game:state', payload: { x: 1 } };
+    expect(await msg42).toEqual(expected);
+    expect(await msg17).toEqual(expected);
+  });
+});
