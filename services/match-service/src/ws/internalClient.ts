@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import WebSocket, { type RawData } from 'ws';
 import type { WsEnvelope } from '@mypong/types';
 
@@ -15,6 +16,9 @@ interface CreateInternalClientOpts {
   // Initial retry delay in ms. Doubles on each failure, caps at BACKOFF_CAP_MS.
   // Override in tests to avoid waiting the default 1 s between retries.
   initialRetryDelayMs?: number;
+  // When provided, this file is written on connect and removed on disconnect.
+  // Docker's healthcheck uses `test -f <path>` to reflect the connection state.
+  healthFilePath?: string;
 }
 
 // Exponential backoff strategy: delay starts at initialRetryDelayMs (default 1 s),
@@ -35,6 +39,9 @@ export function createInternalClient(opts: CreateInternalClientOpts): InternalCl
 
     ws.on('open', () => {
       delay = opts.initialRetryDelayMs ?? BACKOFF_INIT_MS; // reset on successful connect
+      if (opts.healthFilePath) {
+        fs.writeFileSync(opts.healthFilePath, '');
+      }
       ws.send(JSON.stringify({
         type:    'service:register',
         service: opts.serviceName,
@@ -59,6 +66,9 @@ export function createInternalClient(opts: CreateInternalClientOpts): InternalCl
     });
 
     ws.on('close', () => {
+      if (opts.healthFilePath) {
+        try { fs.unlinkSync(opts.healthFilePath); } catch { /* already removed */ }
+      }
       if (stopped) return;
       // Increase delay before scheduling retry so the next failure waits longer.
       const retryAfter = delay;

@@ -30,6 +30,7 @@ COPY services/match-service/migrations/ ./migrations/
 
 USER node
 
-EXPOSE 4502
+HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=5 \
+  CMD test -f /tmp/healthy
 
 CMD ["node", "dist/index.js"]

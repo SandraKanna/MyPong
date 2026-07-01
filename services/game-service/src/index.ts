@@ -1,29 +1,18 @@
-import { buildServer } from './app';
 import { config } from './config';
 import { createInternalClient } from './ws/internalClient';
 
-async function main() {
+function main(): void {
   const wsClient = createInternalClient({
-    url:        config.GATEWAY_WS_URL,
-    secret:     config.INTERNAL_SERVICE_SECRET,
-    serviceName: 'game-service',
+    url:            config.GATEWAY_WS_URL,
+    secret:         config.INTERNAL_SERVICE_SECRET,
+    serviceName:    'game-service',
+    healthFilePath: '/tmp/healthy',
   });
-
-  const { httpServer } = buildServer();
-
-  await new Promise<void>((resolve) => {
-    httpServer.listen(config.PORT, resolve);
-  });
-
-  console.log(`game-service health server listening on port ${config.PORT.toString()}`);
 
   process.on('SIGTERM', () => {
     wsClient.close();
-    httpServer.close(() => { process.exit(0); });
+    process.exit(0);
   });
 }
 
-main().catch((err: unknown) => {
-  console.error(err);
-  process.exit(1);
-});
+main();

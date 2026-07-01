@@ -1,4 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createInternalClient, type InternalClient } from '../src/ws/internalClient';
 
@@ -148,5 +151,102 @@ describe('internalClient — reconnects after disconnect', () => {
 
     await secondReg;
     expect(registrations).toBe(2);
+  });
+});
+
+describe('internalClient — health file management', () => {
+  let server: WebSocketServer;
+  let port: number;
+  let client: InternalClient;
+  let serverSocket: WebSocket;
+  let filePath: string;
+
+  beforeEach(async () => {
+    filePath = path.join(os.tmpdir(), `test-healthy-${Math.random().toString(36).slice(2)}`);
+    server = new WebSocketServer({ port: 0 });
+    await new Promise<void>((resolve) => { server.once('listening', resolve); });
+    port = (server.address() as { port: number }).port;
+  });
+
+  afterEach(async () => {
+    client.close();
+    try { fs.unlinkSync(filePath); } catch { /* already removed */ }
+    await new Promise<void>((resolve) => { server.close(() => { resolve(); }); });
+  });
+
+  it('writes the health file when the connection opens', async () => {
+    const connected = new Promise<void>((resolve) => {
+      server.once('connection', (ws) => {
+        serverSocket = ws;
+        ws.once('message', () => { resolve(); }); // consume service:register
+      });
+    });
+
+    client = createInternalClient({
+      url: `ws://127.0.0.1:${port}`,
+      secret: 'x'.repeat(32),
+      serviceName: 'game-service',
+      initialRetryDelayMs: 50,
+      healthFilePath: filePath,
+    });
+
+    await connected;
+    expect(fs.existsSync(filePath)).toBe(true);
+  });
+
+  it('removes the health file when the connection drops', async () => {
+    const connected = new Promise<void>((resolve) => {
+      server.once('connection', (ws) => {
+        serverSocket = ws;
+        ws.once('message', () => { resolve(); });
+      });
+    });
+
+    client = createInternalClient({
+      url: `ws://127.0.0.1:${port}`,
+      secret: 'x'.repeat(32),
+      serviceName: 'game-service',
+      initialRetryDelayMs: 50,
+      healthFilePath: filePath,
+    });
+
+    await connected;
+    expect(fs.existsSync(filePath)).toBe(true);
+
+    serverSocket.close();
+    await vi.waitFor(() => {
+      expect(fs.existsSync(filePath)).toBe(false);
+    }, { timeout: 1000, interval: 10 });
+  });
+
+  it('recreates the health file after reconnecting', async () => {
+    const firstConnected = new Promise<void>((resolve) => {
+      server.once('connection', (ws) => {
+        serverSocket = ws;
+        ws.once('message', () => { resolve(); });
+      });
+    });
+
+    client = createInternalClient({
+      url: `ws://127.0.0.1:${port}`,
+      secret: 'x'.repeat(32),
+      serviceName: 'game-service',
+      initialRetryDelayMs: 50,
+      healthFilePath: filePath,
+    });
+
+    await firstConnected;
+    expect(fs.existsSync(filePath)).toBe(true);
+
+    // Set up second-connection listener before closing to avoid missing the event.
+    const secondConnected = new Promise<void>((resolve) => {
+      server.once('connection', (ws) => {
+        ws.once('message', () => { resolve(); });
+      });
+    });
+    serverSocket.close();
+    await secondConnected;
+
+    expect(fs.existsSync(filePath)).toBe(true);
   });
 });

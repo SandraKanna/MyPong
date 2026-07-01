@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 const envSchema = z.object({
-  PORT: z.string().regex(/^\d+$/).transform(Number),
   // ws:// URL — z.string().min(1) used instead of z.url() because Zod v4
   // may reject ws:// as a non-http scheme.
   GATEWAY_WS_URL: z.string().min(1),
