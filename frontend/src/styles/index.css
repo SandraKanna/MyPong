@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* PLACEHOLDER palette — neutral grayscale until a dedicated design pass. See CLAUDE.md Pendientes. */
+/* PLACEHOLDER palette — neutral grayscale until a dedicated design pass. */
 @theme {
   --color-bg: #18181b;
   --color-surface: #27272a;

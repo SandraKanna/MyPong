@@ -11,8 +11,7 @@ const CLOSE_UNAUTHORIZED = 4001;
 const CLOSE_BAD_REQUEST  = 4003;
 
 // Service names allowed to register. Extend when new WS-client services land.
-const KNOWN_SERVICES = new Set(['game-service', 'match-service']);
-
+const KNOWN_SERVICES = new Set(['game-service', 'match-service', 'test-service']); // 'test-service' is reserved for smoke tests — never a real container; registration still requires INTERNAL_SERVICE_SECRET
 // ── Message types ─────────────────────────────────────────────────────────────
 
 interface AuthMessage {
@@ -133,7 +132,7 @@ export function buildServer(opts: BuildServerOptions = {}): ServerInstance {
           services.get(`${prefix}-service`)?.send(JSON.stringify(envelope));
         });
 
-        socket.on('close', () => { services.delete(serviceName); });
+        socket.on('close', () => { if (services.get(serviceName) === socket) services.delete(serviceName); });
         return;
       }
 
