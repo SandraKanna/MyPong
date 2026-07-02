@@ -116,6 +116,42 @@ describe('gateway-ws — service registration', () => {
     ws.send(JSON.stringify({ type: 'service:register' })); // no service or token
     expect(await closePromise).toBe(4003);
   });
+
+  it('stale close of an overwritten service socket does not remove the newer registration', async () => {
+    const svc1 = await registerService(port, 'match-service');
+    const svc2 = await registerService(port, 'match-service');
+
+    // Close svc1 (the overwritten socket) and let gateway-ws process the event.
+    const svc1Closed = onceClose(svc1);
+    svc1.close(1000);
+    await svc1Closed;
+    await new Promise<void>((resolve) => { setTimeout(resolve, 20); });
+
+    // svc2 must still be routable.
+    const browser = await connectBrowser(port, 42);
+    await onceMessage(svc2); // drain player:connect
+
+    const routed = onceMessage(svc2);
+    browser.send(JSON.stringify({ type: 'match:join' }));
+    expect(await routed).toMatchObject({ type: 'match:join', userId: 42 });
+  });
+
+  it('sole service registration is removed when its socket closes', async () => {
+    const svc = await registerService(port, 'match-service');
+    const browser = await connectBrowser(port, 42);
+    await onceMessage(svc); // drain player:connect
+
+    // Close the only registered socket and wait for the event to process.
+    const svcClosed = onceClose(svc);
+    svc.close(1000);
+    await svcClosed;
+    await new Promise<void>((resolve) => { setTimeout(resolve, 20); });
+
+    // Routing to 'match' prefix is gone — message is silently dropped, browser stays connected.
+    browser.send(JSON.stringify({ type: 'match:join' }));
+    await new Promise<void>((resolve) => { setTimeout(resolve, 50); });
+    expect(browser.readyState).toBe(WebSocket.OPEN);
+  });
 });
 
 describe('gateway-ws — browser→service routing', () => {
