@@ -138,6 +138,7 @@ describe('gateway-ws — browser→service routing', () => {
   it('routes a browser message to the registered service with userId injected', async () => {
     const serviceWs = await registerService(port, 'match-service');
     const browserWs = await connectBrowser(port, 42);
+    await onceMessage(serviceWs); // drain player:connect broadcast
 
     const routed = onceMessage(serviceWs);
     browserWs.send(JSON.stringify({ type: 'match:join' }));
@@ -148,6 +149,7 @@ describe('gateway-ws — browser→service routing', () => {
   it('overwrites any userId the browser sent with the one from the JWT', async () => {
     const serviceWs = await registerService(port, 'match-service');
     const browserWs = await connectBrowser(port, 42);
+    await onceMessage(serviceWs); // drain player:connect broadcast
 
     const routed = onceMessage(serviceWs);
     // Client tries to spoof userId 999 — gateway-ws must replace it with 42.
@@ -277,5 +279,76 @@ describe('gateway-ws — service→service routing', () => {
     const expected = { type: 'game:state', payload: { x: 1 } };
     expect(await msg42).toEqual(expected);
     expect(await msg17).toEqual(expected);
+  });
+});
+
+describe('gateway-ws — presence broadcast', () => {
+  let instance: ServerInstance;
+  let port: number;
+
+  beforeEach(async () => {
+    instance = buildServer({ authTimeoutMs: 100 });
+    await new Promise<void>((resolve) => { instance.httpServer.listen(0, resolve); });
+    port = (instance.httpServer.address() as { port: number }).port;
+  });
+
+  afterEach(async () => {
+    for (const client of instance.wss.clients) { client.terminate(); }
+    await new Promise<void>((resolve) => {
+      instance.wss.close(() => { instance.httpServer.close(() => { resolve(); }); });
+    });
+  });
+
+  it('broadcasts player:connect to all registered services when a browser authenticates', async () => {
+    const svc1 = await registerService(port, 'game-service');
+    const svc2 = await registerService(port, 'match-service');
+
+    const msg1 = onceMessage(svc1);
+    const msg2 = onceMessage(svc2);
+
+    await connectBrowser(port, 42);
+
+    expect(await msg1).toEqual({ type: 'player:connect', userId: 42 });
+    expect(await msg2).toEqual({ type: 'player:connect', userId: 42 });
+  });
+
+  it('broadcasts player:disconnect to all registered services when a browser closes', async () => {
+    const svc = await registerService(port, 'game-service');
+    const browser = await connectBrowser(port, 42);
+
+    // Consume the player:connect so the next message from svc is player:disconnect.
+    await onceMessage(svc);
+
+    const disconnectMsg = onceMessage(svc);
+    browser.close(1000);
+
+    expect(await disconnectMsg).toEqual({ type: 'player:disconnect', userId: 42 });
+  });
+
+  it('does not throw when no services are registered and a browser connects or disconnects', async () => {
+    const browser = await connectBrowser(port, 42);
+    // Allow any microtasks triggered by the connect broadcast to settle.
+    await new Promise<void>((resolve) => { setTimeout(resolve, 20); });
+    expect(browser.readyState).toBe(WebSocket.OPEN);
+
+    browser.close(1000);
+    await new Promise<void>((resolve) => { setTimeout(resolve, 20); });
+    // Server is still running cleanly.
+    expect(instance.wss.clients.size).toBe(0);
+  });
+
+  it('does not send presence messages to other browser connections', async () => {
+    const bystander = await connectBrowser(port, 99);
+
+    // Collect any message that arrives at the bystander within 100ms after
+    // a second browser connects and then disconnects.
+    const unexpected: unknown[] = [];
+    bystander.on('message', (data) => { unexpected.push(JSON.parse(data.toString())); });
+
+    const newcomer = await connectBrowser(port, 42);
+    newcomer.close(1000);
+
+    await new Promise<void>((resolve) => { setTimeout(resolve, 100); });
+    expect(unexpected).toHaveLength(0);
   });
 });
