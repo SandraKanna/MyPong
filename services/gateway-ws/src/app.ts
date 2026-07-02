@@ -159,6 +159,10 @@ export function buildServer(opts: BuildServerOptions = {}): ServerInstance {
         browsers.set(userId, socket);
         socket.send(JSON.stringify({ type: 'connected', payload: { userId: decoded['sub'] } }));
 
+        for (const svc of services.values()) {
+          svc.send(JSON.stringify({ type: 'player:connect', userId }));
+        }
+
         // Browser → service routing: extract prefix from type before ':', look up
         // the registered service by `${prefix}-service`, inject userId.
         // gateway-ws overwrites any userId the client may have included — it is
@@ -174,7 +178,12 @@ export function buildServer(opts: BuildServerOptions = {}): ServerInstance {
           target.send(JSON.stringify({ ...envelope, userId }));
         });
 
-        socket.on('close', () => { browsers.delete(userId); });
+        socket.on('close', () => {
+          browsers.delete(userId);
+          for (const svc of services.values()) {
+            svc.send(JSON.stringify({ type: 'player:disconnect', userId }));
+          }
+        });
         return;
       }
 
