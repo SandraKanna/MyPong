@@ -2,14 +2,17 @@ import type { WsEnvelope } from '@mypong/types';
 import { Game } from '../physics/game';
 
 export interface Session {
-  game:     Game;
-  players:  Map<number, 'left' | 'right'>;
-  userIds:  [number, number];
-  interval: ReturnType<typeof setInterval>;
+  game:              Game;
+  players:           Map<number, 'left' | 'right'>;
+  userIds:           [number, number];
+  interval:          ReturnType<typeof setInterval>;
+  disconnectedUserId?: number;
+  disconnectTimer?:    ReturnType<typeof setTimeout>;
 }
 
 interface Opts {
   tickIntervalMs?: number;
+  gracePeriodMs?:  number;
   gameFactory?:    () => Game;
 }
 
@@ -26,12 +29,14 @@ interface InputPayload {
 export class GameSessionManager {
   private readonly send:           (envelope: WsEnvelope) => void;
   private readonly tickIntervalMs: number;
+  private readonly gracePeriodMs:  number;
   private readonly gameFactory:    () => Game;
   private readonly sessions:       Map<number, Session> = new Map();
 
   constructor(send: (envelope: WsEnvelope) => void, opts?: Opts) {
     this.send           = send;
     this.tickIntervalMs = opts?.tickIntervalMs ?? 16;
+    this.gracePeriodMs  = opts?.gracePeriodMs  ?? 5_000;
     this.gameFactory    = opts?.gameFactory    ?? (() => new Game());
   }
 
@@ -100,6 +105,40 @@ export class GameSessionManager {
     if (!side) return;
 
     session.game.setPaddleDirection(side, direction);
+  }
+
+  handlePlayerDisconnect(userId: number): void {
+    for (const [matchId, session] of this.sessions) {
+      if (!session.players.has(userId)) continue;
+      // Second disconnect while a timer is already running → no-op.
+      if (session.disconnectedUserId !== undefined) return;
+
+      session.game.pause();
+      session.disconnectedUserId = userId;
+      session.disconnectTimer = setTimeout(() => {
+        this.sessions.delete(matchId);
+        clearInterval(session.interval);
+
+        const { score } = session.game.getState();
+        const winnerId  = session.userIds.find((id) => id !== userId)!;
+
+        this.send({ type: 'match:result', payload: { matchId, winnerId, score } });
+        this.send({ type: 'game:end', to: session.userIds, payload: { matchId, winnerId, score } });
+      }, this.gracePeriodMs);
+      return;
+    }
+  }
+
+  handlePlayerConnect(userId: number): void {
+    for (const session of this.sessions.values()) {
+      if (session.disconnectedUserId !== userId) continue;
+
+      clearTimeout(session.disconnectTimer);
+      session.disconnectTimer    = undefined;
+      session.disconnectedUserId = undefined;
+      session.game.resume();
+      return;
+    }
   }
 
   getSession(matchId: number): Session | undefined {

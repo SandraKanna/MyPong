@@ -29,7 +29,8 @@ if (!SERVICE_SECRET) {
   process.exit(1);
 }
 
-const TEST_MATCH_ID = 99001;
+const TEST_MATCH_ID  = 99001;
+const TEST_MATCH_ID_2 = 99002;
 
 let passed = 0;
 let failed = 0;
@@ -297,8 +298,96 @@ async function main() {
       fail('outsider game:input ignored — no crash, right paddle unaffected', err.message);
     }
 
+    // ── Test 8: forfeit by disconnect — disconnected player's opponent wins ──────
+    // Fresh browser sockets (same tokens) + separate matchId to isolate from the
+    // still-running TEST_MATCH_ID session above.
+    let browser1b, browser2b;
+    try {
+      const [tokenA, tokenB] = await Promise.all([
+        getAccessToken('p3'),
+        getAccessToken('p4'),
+      ]);
+      browser1b = await connectBrowser(tokenA);
+      sockets.push(browser1b.ws);
+      browser2b = await connectBrowser(tokenB);
+      sockets.push(browser2b.ws);
+    } catch (err) {
+      fail('forfeit test — browser connections', err.message);
+      process.exit(1);
+    }
+
+    // Attach listeners BEFORE game:assign so no message is missed.
+    // wsNextMatching skips player:connect/player:disconnect broadcasts
+    // on internalWs and game:state ticks on browser2b.
+    const forfeitResult = wsNextMatching(
+      internalWs,
+      (m) => m.type === 'match:result' && m.payload?.matchId === TEST_MATCH_ID_2,
+      12000,
+    );
+    const forfeitEnd = wsNextMatching(
+      browser2b.ws,
+      (m) => m.type === 'game:end' && m.payload?.matchId === TEST_MATCH_ID_2,
+      12000,
+    );
+
+    // Confirm the session is live before triggering the disconnect.
+    const firstState2b = wsNextMatching(browser2b.ws, (m) => m.type === 'game:state', 1000);
+
+    internalWs.send(JSON.stringify({
+      type:    'game:assign',
+      payload: {
+        matchId: TEST_MATCH_ID_2,
+        players: {
+          [String(browser1b.userId)]: 'left',
+          [String(browser2b.userId)]: 'right',
+        },
+      },
+    }));
+
+    try {
+      await withTimeout(firstState2b, 1000);
+    } catch (err) {
+      fail('forfeit test — session did not start (no game:state before disconnect)', err.message);
+      process.exit(1);
+    }
+
+    // Closing browser1b triggers player:disconnect → game-service starts 5s grace timer.
+    browser1b.ws.close(1000);
+
+    try {
+      const result = await forfeitResult;
+      const rp = result.payload;
+      if (
+        rp?.matchId  === TEST_MATCH_ID_2 &&
+        rp?.winnerId === browser2b.userId &&
+        typeof rp?.score?.left  === 'number' &&
+        typeof rp?.score?.right === 'number'
+      ) {
+        pass(`forfeit by disconnect — match:result received (winner: ${rp.winnerId})`);
+      } else {
+        fail('forfeit by disconnect — match:result shape invalid', JSON.stringify(result));
+      }
+    } catch (err) {
+      fail('forfeit by disconnect — match:result not received within 12s', err.message);
+    }
+
+    try {
+      const end = await forfeitEnd;
+      const ep = end.payload;
+      if (
+        ep?.matchId  === TEST_MATCH_ID_2 &&
+        ep?.winnerId === browser2b.userId
+      ) {
+        pass(`forfeit by disconnect — game:end received on surviving browser (winner: ${ep.winnerId})`);
+      } else {
+        fail('forfeit by disconnect — game:end shape invalid', JSON.stringify(end));
+      }
+    } catch (err) {
+      fail('forfeit by disconnect — game:end not received on surviving browser within 12s', err.message);
+    }
+
   } finally {
-    // ── Test 8: clean shutdown ─────────────────────────────────────────────────
+    // ── Test 9: clean shutdown ─────────────────────────────────────────────────
     const closePromises = sockets.map((ws) => {
       const p = wsClose(ws);
       ws.close(1000);

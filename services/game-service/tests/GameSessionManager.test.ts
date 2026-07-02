@@ -163,4 +163,86 @@ describe('GameSessionManager', () => {
     expect(manager.sessionCount()).toBe(0);
     expect(manager.getSession(1)).toBeUndefined();
   });
+
+  // ─── forfeit by disconnect ───────────────────────────────────────────────────
+
+  it('handlePlayerDisconnect pauses the game', () => {
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
+    const spy = vi.spyOn(manager.getSession(1)!.game, 'pause');
+
+    manager.handlePlayerDisconnect(42);
+
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it('handlePlayerConnect within grace period resumes the game and cancels the forfeit', () => {
+    manager = new GameSessionManager((msg) => sent.push(msg), { gracePeriodMs: 5_000 });
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
+    const resumeSpy = vi.spyOn(manager.getSession(1)!.game, 'resume');
+
+    manager.handlePlayerDisconnect(42);
+    vi.advanceTimersByTime(2_000); // inside grace period
+
+    manager.handlePlayerConnect(42);
+
+    expect(resumeSpy).toHaveBeenCalledOnce();
+
+    // Advancing past the original deadline must NOT emit a forfeit.
+    const countBefore = sent.length;
+    vi.advanceTimersByTime(4_000);
+    const newMsgs = sent.slice(countBefore);
+    expect(newMsgs.some((m) => m.type === 'match:result' || m.type === 'game:end')).toBe(false);
+  });
+
+  it('timer expiry emits match:result and game:end with correct forfeit winner', () => {
+    manager = new GameSessionManager((msg) => sent.push(msg), { gracePeriodMs: 5_000 });
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
+
+    manager.handlePlayerDisconnect(42); // 42 disconnects → 17 should win
+    vi.advanceTimersByTime(5_000);
+
+    const resultMsg = sent.find((m) => m.type === 'match:result');
+    expect(resultMsg).toBeDefined();
+    expect(resultMsg!.to).toBeUndefined();
+    const rp = resultMsg!.payload as { matchId: number; winnerId: number; score: unknown };
+    expect(rp.matchId).toBe(1);
+    expect(rp.winnerId).toBe(17);
+
+    const endMsg = sent.find((m) => m.type === 'game:end');
+    expect(endMsg).toBeDefined();
+    expect(endMsg!.to).toEqual(expect.arrayContaining([42, 17]));
+    const ep = endMsg!.payload as { matchId: number; winnerId: number };
+    expect(ep.matchId).toBe(1);
+    expect(ep.winnerId).toBe(17);
+  });
+
+  it('timer expiry removes the session', () => {
+    manager = new GameSessionManager((msg) => sent.push(msg), { gracePeriodMs: 5_000 });
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
+
+    manager.handlePlayerDisconnect(42);
+    vi.advanceTimersByTime(5_000);
+
+    expect(manager.sessionCount()).toBe(0);
+    expect(manager.getSession(1)).toBeUndefined();
+  });
+
+  it('handlePlayerDisconnect is a no-op when the userId is not in any session', () => {
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
+
+    expect(() => manager.handlePlayerDisconnect(99)).not.toThrow();
+    expect(manager.getSession(1)!.disconnectedUserId).toBeUndefined();
+  });
+
+  it('second disconnect while grace timer is running is a no-op', () => {
+    manager = new GameSessionManager((msg) => sent.push(msg), { gracePeriodMs: 5_000 });
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
+    const pauseSpy = vi.spyOn(manager.getSession(1)!.game, 'pause');
+
+    manager.handlePlayerDisconnect(42);
+    manager.handlePlayerDisconnect(17); // second disconnect while timer is running
+
+    expect(pauseSpy).toHaveBeenCalledOnce(); // only the first disconnect paused
+    expect(manager.getSession(1)!.disconnectedUserId).toBe(42); // timer is still for 42
+  });
 });
