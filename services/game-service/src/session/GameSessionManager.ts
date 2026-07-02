@@ -6,6 +6,7 @@ export interface Session {
   players:           Map<number, 'left' | 'right'>;
   userIds:           [number, number];
   interval:          ReturnType<typeof setInterval>;
+  startedAt:         Date;
   disconnectedUserId?: number;
   disconnectTimer?:    ReturnType<typeof setTimeout>;
 }
@@ -60,8 +61,9 @@ export class GameSessionManager {
     const sides = [...players.values()];
     if (!sides.includes('left') || !sides.includes('right')) return;
 
-    const userIds = [...players.keys()] as [number, number];
-    const game    = this.gameFactory();
+    const userIds   = [...players.keys()] as [number, number];
+    const game      = this.gameFactory();
+    const startedAt = new Date();
 
     const interval = setInterval(() => {
       game.update();
@@ -79,13 +81,21 @@ export class GameSessionManager {
           : [...players.entries()].find(([, side]) => side === 'right')![0];
 
         // match:result has no `to` — gateway-ws routes it to match-service by type prefix.
-        this.send({ type: 'match:result', payload: { matchId, winnerId, score } });
+        this.send({ type: 'match:result', payload: {
+          matchId,
+          players:   Object.fromEntries(players),
+          winnerId,
+          score,
+          status:    'completed',
+          startedAt: startedAt.toISOString(),
+          endedAt:   new Date().toISOString(),
+        }});
 
         this.send({ type: 'game:end', to: userIds, payload: { matchId, winnerId, score } });
       }
     }, this.tickIntervalMs);
 
-    this.sessions.set(matchId, { game, players, userIds, interval });
+    this.sessions.set(matchId, { game, players, userIds, interval, startedAt });
   }
 
   handleInput(envelope: WsEnvelope): void {
@@ -122,7 +132,15 @@ export class GameSessionManager {
         const { score } = session.game.getState();
         const winnerId  = session.userIds.find((id) => id !== userId)!;
 
-        this.send({ type: 'match:result', payload: { matchId, winnerId, score } });
+        this.send({ type: 'match:result', payload: {
+          matchId,
+          players:   Object.fromEntries(session.players),
+          winnerId,
+          score,
+          status:    'forfeit',
+          startedAt: session.startedAt.toISOString(),
+          endedAt:   new Date().toISOString(),
+        }});
         this.send({ type: 'game:end', to: session.userIds, payload: { matchId, winnerId, score } });
       }, this.gracePeriodMs);
       return;

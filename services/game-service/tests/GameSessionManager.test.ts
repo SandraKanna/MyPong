@@ -110,7 +110,7 @@ describe('GameSessionManager', () => {
   // Ball at x=795, vx=10 → after one update x=805; 805+10=815 ≥ 800 (fieldWidth)
   // → right wall exit → score.left++ → winnerId = player on 'left' = 42.
 
-  it('sends match:result with correct matchId, winnerId, and score — no `to` field', () => {
+  it('sends match:result with correct matchId, winnerId, score, players, status, timestamps — no `to` field', () => {
     manager = new GameSessionManager(
       (msg) => sent.push(msg),
       { gameFactory: () => new Game({ maxScore: 1 }) },
@@ -123,10 +123,22 @@ describe('GameSessionManager', () => {
     const resultMsg = sent.find((m) => m.type === 'match:result');
     expect(resultMsg).toBeDefined();
 
-    const p = resultMsg!.payload as { matchId: number; winnerId: number; score: { left: number; right: number } };
+    const p = resultMsg!.payload as {
+      matchId:   number;
+      players:   Record<string, string>;
+      winnerId:  number;
+      score:     { left: number; right: number };
+      status:    string;
+      startedAt: string;
+      endedAt:   string;
+    };
     expect(p.matchId).toBe(1);
     expect(p.winnerId).toBe(42);
     expect(p.score).toEqual({ left: 1, right: 0 });
+    expect(p.players).toEqual({ 42: 'left', 17: 'right' });
+    expect(p.status).toBe('completed');
+    expect(typeof p.startedAt).toBe('string');
+    expect(typeof p.endedAt).toBe('string');
     // match:result routes to match-service by type prefix, not fanned out to players
     expect(resultMsg!.to).toBeUndefined();
   });
@@ -204,9 +216,21 @@ describe('GameSessionManager', () => {
     const resultMsg = sent.find((m) => m.type === 'match:result');
     expect(resultMsg).toBeDefined();
     expect(resultMsg!.to).toBeUndefined();
-    const rp = resultMsg!.payload as { matchId: number; winnerId: number; score: unknown };
+    const rp = resultMsg!.payload as {
+      matchId:   number;
+      players:   Record<string, string>;
+      winnerId:  number;
+      score:     unknown;
+      status:    string;
+      startedAt: string;
+      endedAt:   string;
+    };
     expect(rp.matchId).toBe(1);
     expect(rp.winnerId).toBe(17);
+    expect(rp.players).toEqual({ 42: 'left', 17: 'right' });
+    expect(rp.status).toBe('forfeit');
+    expect(typeof rp.startedAt).toBe('string');
+    expect(typeof rp.endedAt).toBe('string');
 
     const endMsg = sent.find((m) => m.type === 'game:end');
     expect(endMsg).toBeDefined();
