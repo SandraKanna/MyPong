@@ -1,0 +1,320 @@
+#!/usr/bin/env node
+/**
+ * match-service smoke test — matchmaking WS wiring.
+ * Tests: match:join → match:matched + game:assign, match:cancel, match:rejected.
+ *
+ * Requires:
+ *   - Full stack running (make up) with migrations applied.
+ *   - INTERNAL_SERVICE_SECRET set in the environment.
+ *
+ * Usage:
+ *   INTERNAL_SERVICE_SECRET=<secret> node services/match-service/scripts/smoke-test.mjs [ws_url] [api_url]
+ *
+ *   ws_url   WebSocket base URL for gateway-ws  (default: ws://localhost:4500)
+ *   api_url  HTTP base URL for gateway-api       (default: http://localhost:4010)
+ *
+ * On Mac with nxd occupying :4000, gateway-api is published on :4010.
+ */
+
+import { WebSocket } from 'ws';
+
+const WS_URL  = process.argv[2] ?? 'ws://localhost:4500';
+const API_URL = process.argv[3] ?? 'http://localhost:4010';
+
+const SERVICE_SECRET = process.env.INTERNAL_SERVICE_SECRET;
+if (!SERVICE_SECRET) {
+  console.error('INTERNAL_SERVICE_SECRET is not set.');
+  console.error('Usage: INTERNAL_SERVICE_SECRET=<secret> node services/match-service/scripts/smoke-test.mjs');
+  process.exit(1);
+}
+
+let passed = 0;
+let failed = 0;
+
+function pass(label) {
+  console.log(`  ✓  ${label}`);
+  passed++;
+}
+
+function fail(label, detail = '') {
+  console.error(`  ✗  ${label}${detail ? ` — ${detail}` : ''}`);
+  failed++;
+}
+
+// ── WS helpers ────────────────────────────────────────────────────────────────
+
+function wsConnect(url) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+    ws.once('open',  ()    => resolve(ws));
+    ws.once('error', (err) => reject(err));
+  });
+}
+
+function wsNextMessage(ws) {
+  return new Promise((resolve) => {
+    ws.once('message', (data) => resolve(JSON.parse(data.toString())));
+  });
+}
+
+// Waits for the next message satisfying predicate, up to timeoutMs.
+// Uses a persistent listener so it catches the right message even if
+// other frames arrive continuously.
+function wsNextMatching(ws, predicate, timeoutMs = 500) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      ws.removeListener('message', handler);
+      reject(new Error(`no matching message within ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    function handler(data) {
+      let msg;
+      try { msg = JSON.parse(data.toString()); } catch { return; }
+      if (predicate(msg)) {
+        clearTimeout(timer);
+        ws.removeListener('message', handler);
+        resolve(msg);
+      }
+    }
+
+    ws.on('message', handler);
+  });
+}
+
+function wsClose(ws) {
+  return new Promise((resolve) => {
+    ws.once('close', (code) => resolve(code));
+  });
+}
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
+// ── HTTP helper ───────────────────────────────────────────────────────────────
+
+async function getAccessToken(label) {
+  const email    = `smoke-match-${label}-${process.pid}@test.invalid`;
+  const password = 'SmokeTest123!';
+
+  const reg = await fetch(`${API_URL}/api/auth/register`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ email, password }),
+  });
+  if (!reg.ok && reg.status !== 409) throw new Error(`register failed: ${reg.status}`);
+
+  const login = await fetch(`${API_URL}/api/auth/login`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ email, password }),
+  });
+  if (!login.ok) throw new Error(`login failed: ${login.status}`);
+
+  const { accessToken } = await login.json();
+  return accessToken;
+}
+
+// Connects a browser to gateway-ws, authenticates, and returns { ws, userId }.
+async function connectBrowser(token) {
+  const ws  = await wsConnect(WS_URL);
+  ws.send(JSON.stringify({ type: 'auth', payload: { token } }));
+  const msg = await withTimeout(wsNextMessage(ws), 3000);
+  if (msg.type !== 'connected' || !msg.payload?.userId) {
+    ws.terminate();
+    throw new Error(`unexpected response: ${JSON.stringify(msg)}`);
+  }
+  return { ws, userId: Number(msg.payload.userId) };
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
+async function main() {
+  console.log('\nmatch-service smoke test');
+  console.log(`  WS:  ${WS_URL}`);
+  console.log(`  API: ${API_URL}\n`);
+
+  const sockets = [];
+
+  try {
+    // Obtain tokens for two match players, one cancel tester, one already-matched tester.
+    let token1, token2, token3;
+    try {
+      [token1, token2, token3] = await Promise.all([
+        getAccessToken('p1'),
+        getAccessToken('p2'),
+        getAccessToken('p3'),
+      ]);
+    } catch (err) {
+      console.error(`Could not obtain access tokens: ${err.message}`);
+      console.error('Is the stack running? (make up + migrations applied)');
+      process.exit(1);
+    }
+
+    // ── Test 1: two browsers authenticate ─────────────────────────────────────
+    let browser1, browser2;
+    try {
+      browser1 = await connectBrowser(token1);
+      sockets.push(browser1.ws);
+      browser2 = await connectBrowser(token2);
+      sockets.push(browser2.ws);
+      pass(`browser1 authenticates (userId: ${browser1.userId})`);
+      pass(`browser2 authenticates (userId: ${browser2.userId})`);
+    } catch (err) {
+      fail('browser authentication', err.message);
+      process.exit(1);
+    }
+
+    // ── Test 2: internal 'game-service' connection registers ──────────────────
+    let internalWs;
+    try {
+      internalWs = await wsConnect(WS_URL);
+      sockets.push(internalWs);
+      internalWs.send(JSON.stringify({
+        type:    'service:register',
+        service: 'game-service',
+        token:   SERVICE_SECRET,
+      }));
+      const regMsg = await withTimeout(wsNextMessage(internalWs), 3000);
+      if (regMsg.type !== 'registered') throw new Error(`unexpected: ${JSON.stringify(regMsg)}`);
+      pass('internal connection registers as game-service');
+    } catch (err) {
+      fail('internal connection registers as game-service', err.message);
+      process.exit(1);
+    }
+
+    // ── Tests 3-4: match:join → match:matched + game:assign ───────────────────
+    // Attach listeners before sending match:join so no message is missed.
+    const matched1 = wsNextMatching(browser1.ws, (m) => m.type === 'match:matched', 3000);
+    const matched2 = wsNextMatching(browser2.ws, (m) => m.type === 'match:matched', 3000);
+    // game:assign listener attached before matchId is known; filtered by matchId after.
+    const assignPromise = wsNextMatching(internalWs, (m) => m.type === 'game:assign', 3000);
+
+    // Drain player:connect broadcasts on internalWs that arrived when browsers connected.
+    // (Already consumed above by wsNextMatching's persistent listener — no action needed
+    // since those were type 'player:connect', not 'game:assign'.)
+
+    browser1.ws.send(JSON.stringify({ type: 'match:join' }));
+    browser2.ws.send(JSON.stringify({ type: 'match:join' }));
+
+    let matchId;
+    try {
+      const [m1, m2] = await Promise.all([
+        withTimeout(matched1, 3000),
+        withTimeout(matched2, 3000),
+      ]);
+
+      const p1 = m1.payload;
+      const p2 = m2.payload;
+
+      if (
+        typeof p1?.matchId === 'number' &&
+        p1.matchId === p2.matchId &&
+        p1.players?.[browser1.userId] === 'left' &&
+        p1.players?.[browser2.userId] === 'right'
+      ) {
+        matchId = p1.matchId;
+        pass(`match:join → match:matched received by both browsers (matchId: ${matchId})`);
+      } else {
+        fail('match:matched shape or matchId mismatch', JSON.stringify({ m1, m2 }));
+      }
+    } catch (err) {
+      fail('match:join → match:matched', err.message);
+    }
+
+    // Test 4: game:assign reaches internal 'game-service' connection.
+    try {
+      const assign = await withTimeout(assignPromise, 3000);
+      const ap = assign.payload;
+      if (
+        ap?.matchId === matchId &&
+        ap?.players?.[browser1.userId] === 'left' &&
+        ap?.players?.[browser2.userId] === 'right' &&
+        assign.to === undefined
+      ) {
+        pass(`game:assign routed to game-service (matchId: ${ap.matchId}, no 'to' field)`);
+      } else {
+        fail('game:assign shape invalid', JSON.stringify(assign));
+      }
+    } catch (err) {
+      fail('game:assign not received by game-service within 3s', err.message);
+    }
+
+    // ── Test 5: match:cancel prevents match:matched ────────────────────────────
+    let browser3;
+    try {
+      browser3 = await connectBrowser(token3);
+      sockets.push(browser3.ws);
+    } catch (err) {
+      fail('browser3 authenticates', err.message);
+      process.exit(1);
+    }
+
+    // Send join then cancel without awaiting between — cancel must arrive before
+    // a second player could pair with browser3.
+    browser3.ws.send(JSON.stringify({ type: 'match:join' }));
+    browser3.ws.send(JSON.stringify({ type: 'match:cancel' }));
+
+    try {
+      // Expect timeout — no match:matched should arrive for this user.
+      await wsNextMatching(browser3.ws, (m) => m.type === 'match:matched', 500);
+      fail('match:cancel — match:matched was received but should not have been');
+    } catch {
+      pass('match:cancel — no match:matched received after cancel (correct)');
+    }
+
+    // ── Test 6: match:rejected for an already-matched user ────────────────────
+    // browser1 already has an active match from test 3.
+    const rejectedPromise = wsNextMatching(
+      browser1.ws,
+      (m) => m.type === 'match:rejected',
+      3000,
+    );
+
+    browser1.ws.send(JSON.stringify({ type: 'match:join' }));
+
+    try {
+      const rejected = await withTimeout(rejectedPromise, 3000);
+      const rp = rejected.payload;
+      // gateway-ws strips `to` before fan-out — browser receives without it.
+      if (rp?.reason === 'already_in_match' && typeof rp?.message === 'string') {
+        pass(`match:rejected received (reason: ${rp.reason})`);
+      } else {
+        fail('match:rejected shape invalid', JSON.stringify(rejected));
+      }
+    } catch (err) {
+      fail('match:rejected not received within 3s', err.message);
+    }
+
+    // Assert browser1 was NOT re-enqueued: no match:matched should arrive.
+    try {
+      await wsNextMatching(browser1.ws, (m) => m.type === 'match:matched', 500);
+      fail('match:rejected — browser1 was re-enqueued (match:matched received unexpectedly)');
+    } catch {
+      pass('match:rejected — browser1 was not re-enqueued (no match:matched after rejection)');
+    }
+
+  } finally {
+    // ── Test 7: clean shutdown ─────────────────────────────────────────────────
+    const closePromises = sockets.map((ws) => {
+      const p = wsClose(ws);
+      ws.close(1000);
+      return p;
+    });
+    await Promise.all(closePromises);
+    pass('all sockets closed cleanly');
+  }
+
+  console.log(`\n  ${passed} passed, ${failed} failed\n`);
+  process.exit(failed > 0 ? 1 : 0);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

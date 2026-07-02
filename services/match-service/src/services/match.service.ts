@@ -53,6 +53,14 @@ export async function createMatch(
   return toMatchRowTs(rows[0]);
 }
 
+export async function findActiveMatchForUser(userId: number): Promise<MatchRowTs | null> {
+  const { rows } = await db.query<MatchRowSql>(
+    `SELECT * FROM match WHERE status = 'active' AND (player1_id = $1 OR player2_id = $1) LIMIT 1`,
+    [userId],
+  );
+  return rows.length > 0 ? toMatchRowTs(rows[0]) : null;
+}
+
 export async function closeMatch(
   id: number,
   update: {
