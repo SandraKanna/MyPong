@@ -26,10 +26,12 @@ async function main() {
     process.exit(1);
   }
 
-  process.on('SIGTERM', async () => {
-    wsClient.close();
-    await app.close();
-    process.exit(0);
+  process.on('SIGTERM', () => {
+    void (async () => {
+      wsClient.close();
+      await app.close();
+      process.exit(0);
+    })();
   });
 }
 
