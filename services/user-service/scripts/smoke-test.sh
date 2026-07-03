@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # Usage: ./scripts/smoke-test.sh [base_url]
-# Default: http://localhost:4002 (user-service direct, no gateway-api)
+# Default: http://localhost:4010 (gateway-api)
 #
-# NOTE: This smoke test bypasses gateway-api and injects x-user-id manually
-# with -H to simulate what gateway-api does after JWT validation. This is
-# intentional for this PR — end-to-end verification through the full proxy
-# path (nginx → gateway-api → user-service) arrives in feat/gateway-user-proxy.
+# NOTE: user-service has no host port mapping — port 4002 is only reachable
+# from other containers on the internal Docker network. Postgres also has no
+# host port mapping, so a standalone native dev flow is not supported for this
+# service. This smoke test always runs through gateway-api.
+#
+# A real login is performed via gateway-api after registration, and all
+# user-service requests use the resulting Bearer token for authentication —
+# this exercises the full JWT-validation path through gateway-api.
 #
 # Requires:
 #   - Full stack running: make up
@@ -18,7 +22,7 @@
 # Rows are NOT cleaned up automatically — acceptable in dev.
 set -uo pipefail
 
-BASE_URL="${1:-http://localhost:4002}"
+BASE_URL="${1:-http://localhost:4010}"
 AUTH_URL="http://localhost:4001"
 PASS=0
 FAIL=0
@@ -76,34 +80,63 @@ fi
 USER_ID=$(body "$r" | grep -o '"userId":[0-9]*' | grep -o '[0-9]*')
 TEST_USERNAME="smokeuser_$$"
 
+r=$(req POST "$BASE_URL/api/auth/login" "{\"email\":\"$TEST_EMAIL\",\"password\":\"$TEST_PASS\"}")
+if [[ "$(status "$r")" != "200" ]]; then
+  echo "[FATAL] Could not log in at $BASE_URL — is gateway-api up?"
+  echo "        body: $(body "$r")"
+  exit 1
+fi
+ACCESS_TOKEN=$(body "$r" | grep -o '"accessToken":"[^"]*"' | grep -o '"[^"]*"$' | tr -d '"')
+
 echo "  test user registered — userId=$USER_ID"
+echo "  access token obtained"
 echo ""
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
-# 1. DENY: GET /me without x-user-id → 401
-r=$(req GET "$BASE_URL/me")
-assert_status "GET /me — no x-user-id header (deny)" "401" "$(status "$r")" "$(body "$r")"
+# 1. DENY: GET /me without Authorization header → 401
+r=$(req GET "$BASE_URL/api/users/me")
+assert_status "GET /me — no Authorization header (deny)" "401" "$(status "$r")" "$(body "$r")"
 
-# 2. DENY: PATCH /me without x-user-id → 401
-r=$(req PATCH "$BASE_URL/me" "{\"username\":\"$TEST_USERNAME\"}")
-assert_status "PATCH /me — no x-user-id header (deny)" "401" "$(status "$r")" "$(body "$r")"
+# 2. DENY: PATCH /me without Authorization header → 401
+r=$(req PATCH "$BASE_URL/api/users/me" "{\"username\":\"$TEST_USERNAME\"}")
+assert_status "PATCH /me — no Authorization header (deny)" "401" "$(status "$r")" "$(body "$r")"
 
 # 3. GET /me → 404 (no profile yet)
-r=$(req GET "$BASE_URL/me" "" "x-user-id: $USER_ID")
+r=$(req GET "$BASE_URL/api/users/me" "" "Authorization: Bearer $ACCESS_TOKEN")
 assert_status "GET /me — profile not found (404)" "404" "$(status "$r")" "$(body "$r")"
 
 # 4. PATCH /me → 200 (creates profile)
-r=$(req PATCH "$BASE_URL/me" "{\"username\":\"$TEST_USERNAME\"}" "x-user-id: $USER_ID")
+r=$(req PATCH "$BASE_URL/api/users/me" "{\"username\":\"$TEST_USERNAME\"}" "Authorization: Bearer $ACCESS_TOKEN")
 assert_status "PATCH /me — create profile (200)" "200" "$(status "$r")" "$(body "$r")"
 
 # 5. GET /me → 200 (profile now exists)
-r=$(req GET "$BASE_URL/me" "" "x-user-id: $USER_ID")
+r=$(req GET "$BASE_URL/api/users/me" "" "Authorization: Bearer $ACCESS_TOKEN")
 assert_status "GET /me — profile exists (200)" "200" "$(status "$r")" "$(body "$r")"
 
 # 6. DENY: PATCH /me with invalid username (spaces) → 400
-r=$(req PATCH "$BASE_URL/me" "{\"username\":\"invalid name\"}" "x-user-id: $USER_ID")
+r=$(req PATCH "$BASE_URL/api/users/me" "{\"username\":\"invalid name\"}" "Authorization: Bearer $ACCESS_TOKEN")
 assert_status "PATCH /me — invalid username with spaces (400)" "400" "$(status "$r")" "$(body "$r")"
+
+# 7. GET /:id/stats — user exists but has no matches → 200 with zeroed defaults
+r=$(req GET "$BASE_URL/api/users/$USER_ID/stats" "" "Authorization: Bearer $ACCESS_TOKEN")
+assert_status "GET /:id/stats — zero matches, zeroed defaults (200)" "200" "$(status "$r")" "$(body "$r")"
+
+# 8. GET /:id/matches — user exists but has no matches → 200, empty array
+r=$(req GET "$BASE_URL/api/users/$USER_ID/matches" "" "Authorization: Bearer $ACCESS_TOKEN")
+assert_status "GET /:id/matches — zero matches, empty array (200)" "200" "$(status "$r")" "$(body "$r")"
+
+# 9. DENY: GET /:id/matches?limit=51 → 400 (exceeds max)
+r=$(req GET "$BASE_URL/api/users/$USER_ID/matches?limit=51" "" "Authorization: Bearer $ACCESS_TOKEN")
+assert_status "GET /:id/matches — limit=51 exceeds max (deny 400)" "400" "$(status "$r")" "$(body "$r")"
+
+# 10. DENY: GET /:id/stats — non-numeric id → 400
+r=$(req GET "$BASE_URL/api/users/abc/stats" "" "Authorization: Bearer $ACCESS_TOKEN")
+assert_status "GET /:id/stats — non-numeric id (deny 400)" "400" "$(status "$r")" "$(body "$r")"
+
+# 11. DENY: GET /:id/stats — no Authorization header → 401
+r=$(req GET "$BASE_URL/api/users/$USER_ID/stats")
+assert_status "GET /:id/stats — no Authorization header (deny 401)" "401" "$(status "$r")" "$(body "$r")"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 
