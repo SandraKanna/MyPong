@@ -21,7 +21,7 @@ function main(): void {
   wsClient.onMessage('match:join',        (msg) => { if (msg.userId !== undefined) void queue.handleJoin(msg.userId); });
   wsClient.onMessage('match:cancel',      (msg) => { if (msg.userId !== undefined) queue.handleCancel(msg.userId); });
   wsClient.onMessage('player:disconnect', (msg) => { if (msg.userId !== undefined) queue.handleDisconnect(msg.userId); });
-  wsClient.onMessage('match:result',      (msg) => { void handleMatchResult(msg.payload, closeMatch); });
+  wsClient.onMessage('match:result',      (msg) => { void handleMatchResult(msg.payload, closeMatch, (m) => wsClient.send(m)); });
 
   process.on('SIGTERM', () => {
     wsClient.close();
