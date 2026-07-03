@@ -20,9 +20,12 @@ type CloseMatchFn = (
   },
 ) => Promise<unknown>;
 
+type SendFn = (msg: object) => void;
+
 export async function handleMatchResult(
   payload: unknown,
   closeMatchFn: CloseMatchFn,
+  sendFn: SendFn,
 ): Promise<void> {
   const p = payload as MatchResultPayload | undefined;
   if (
@@ -42,6 +45,7 @@ export async function handleMatchResult(
       winnerId:     p.winnerId,
       status:       p.status,
     });
+    sendFn({ type: 'user:matchRecorded', payload: p });
   } catch (err) {
     console.error('[match-service] closeMatch failed:', err);
   }

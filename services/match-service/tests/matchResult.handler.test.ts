@@ -13,15 +13,17 @@ const basePayload = {
 
 describe('handleMatchResult', () => {
   let closeMatchFn: ReturnType<typeof vi.fn>;
+  let sendFn:       ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     closeMatchFn = vi.fn().mockResolvedValue(null);
+    sendFn       = vi.fn();
   });
 
   // ─── happy path ──────────────────────────────────────────────────────────────
 
   it('calls closeMatch with correct matchId, scores, winnerId, and status', async () => {
-    await handleMatchResult(basePayload, closeMatchFn);
+    await handleMatchResult(basePayload, closeMatchFn, sendFn);
 
     expect(closeMatchFn).toHaveBeenCalledOnce();
     expect(closeMatchFn).toHaveBeenCalledWith(7, {
@@ -34,7 +36,7 @@ describe('handleMatchResult', () => {
 
   it('maps score.left → player1Score and score.right → player2Score', async () => {
     const payload = { ...basePayload, score: { left: 3, right: 9 } };
-    await handleMatchResult(payload, closeMatchFn);
+    await handleMatchResult(payload, closeMatchFn, sendFn);
 
     const call = closeMatchFn.mock.calls[0][1];
     expect(call.player1Score).toBe(3);
@@ -43,7 +45,7 @@ describe('handleMatchResult', () => {
 
   it('passes status: forfeit through to closeMatch', async () => {
     const payload = { ...basePayload, status: 'forfeit' as const };
-    await handleMatchResult(payload, closeMatchFn);
+    await handleMatchResult(payload, closeMatchFn, sendFn);
 
     expect(closeMatchFn).toHaveBeenCalledWith(7, expect.objectContaining({ status: 'forfeit' }));
   });
@@ -51,7 +53,7 @@ describe('handleMatchResult', () => {
   // ─── validation ──────────────────────────────────────────────────────────────
 
   it('does nothing when payload is undefined', async () => {
-    await handleMatchResult(undefined, closeMatchFn);
+    await handleMatchResult(undefined, closeMatchFn, sendFn);
     expect(closeMatchFn).not.toHaveBeenCalled();
   });
 
@@ -82,7 +84,25 @@ describe('handleMatchResult', () => {
     closeMatchFn.mockRejectedValueOnce(new Error('timeout'));
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await expect(handleMatchResult(basePayload, closeMatchFn)).resolves.toBeUndefined();
+    await expect(handleMatchResult(basePayload, closeMatchFn, sendFn)).resolves.toBeUndefined();
+    errorSpy.mockRestore();
+  });
+
+  // ─── user:matchRecorded emission ─────────────────────────────────────────────
+
+  it('sends user:matchRecorded with the full payload after closeMatch succeeds', async () => {
+    await handleMatchResult(basePayload, closeMatchFn, sendFn);
+
+    expect(sendFn).toHaveBeenCalledOnce();
+    expect(sendFn).toHaveBeenCalledWith({ type: 'user:matchRecorded', payload: basePayload });
+  });
+
+  it('does not send user:matchRecorded when closeMatch throws', async () => {
+    closeMatchFn.mockRejectedValueOnce(new Error('DB down'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await handleMatchResult(basePayload, closeMatchFn, sendFn);
+    expect(sendFn).not.toHaveBeenCalled();
     errorSpy.mockRestore();
   });
 });
