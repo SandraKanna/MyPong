@@ -16,6 +16,7 @@ RUN npm ci
 # Compile TypeScript
 COPY services/user-service/tsconfig.json ./
 COPY services/user-service/src/ ./src/
+COPY shared/types/ /app/shared/types/
 RUN npm run build
 
 # Install production-only dependencies
