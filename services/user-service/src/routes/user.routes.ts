@@ -5,6 +5,7 @@ import { FastifyPluginCallback } from 'fastify';
 import '@fastify/multipart'; // pulls in type augmentation for request.file()
 import sharp from 'sharp';
 import * as userService from '../services/user.service';
+import * as statsService from '../services/stats.service';
 import { patchMeSchema } from '../schemas/user.schemas';
 import { getUserId } from '../lib/getUserId';
 import { detectImageType } from '../lib/detectImageType';
@@ -144,6 +145,46 @@ export const userRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       username: profile.username,
       avatar_url: profile.avatar_url,
     });
+  });
+
+  fastify.get('/:id/stats', async (request, reply) => {
+    const callerId = getUserId(request);
+    if (callerId === null) {
+      return reply.status(401).send({ error: 'Missing or invalid user identity' });
+    }
+
+    const { id: rawId } = request.params as { id: string };
+    const targetId = Number(rawId);
+    if (!Number.isInteger(targetId) || targetId <= 0) {
+      return reply.status(400).send({ error: 'Invalid user id' });
+    }
+
+    const stats = await statsService.getStats(targetId);
+    return reply.status(200).send(stats);
+  });
+
+  fastify.get('/:id/matches', async (request, reply) => {
+    const callerId = getUserId(request);
+    if (callerId === null) {
+      return reply.status(401).send({ error: 'Missing or invalid user identity' });
+    }
+
+    const { id: rawId } = request.params as { id: string };
+    const targetId = Number(rawId);
+    if (!Number.isInteger(targetId) || targetId <= 0) {
+      return reply.status(400).send({ error: 'Invalid user id' });
+    }
+
+    const rawQuery = request.query as Record<string, string | undefined>;
+    const limit  = Number(rawQuery.limit  ?? '20');
+    const offset = Number(rawQuery.offset ?? '0');
+
+    if (!Number.isInteger(limit)  || limit  < 1) return reply.status(400).send({ error: 'limit must be a positive integer' });
+    if (!Number.isInteger(offset) || offset < 0)  return reply.status(400).send({ error: 'offset must be a non-negative integer' });
+    if (limit > 50) return reply.status(400).send({ error: 'limit must not exceed 50' });
+
+    const matches = await statsService.getMatchHistory(targetId, limit, offset);
+    return reply.status(200).send({ userId: targetId, matches, limit, offset });
   });
 
   done();

@@ -67,3 +67,22 @@ Response `400`: `{ error: 'Unsupported image type — accepted: JPEG, PNG, WebP,
 Response `401`: missing or invalid `x-user-id` header.
 Response `413`: `{ error: 'File too large (max 5 MB)' }` — fileSize limit exceeded.
 Response `422`: `{ error: 'Profile not found — set a username first' }` — no profile row exists (UPDATE affected 0 rows). Avatar upload requires a prior PATCH /me to create the profile row.
+
+### GET /api/users/:id/stats
+
+No body. `:id` must be a positive integer.
+Response `200`: `{ userId: number, gamesPlayed: number, gamesWon: number, highestScore: number, winRate: number }` — `winRate` is `gamesWon / gamesPlayed` rounded to 4 decimal places (e.g. `0.6667`), or `0` if `gamesPlayed` is `0`. Returns zeroed defaults (all `0`) if the user has no recorded matches; never a `404`.
+Response `400`: `{ error: 'Invalid user id' }` — `:id` is not a positive integer.
+Response `401`: missing or invalid `x-user-id` header.
+
+### GET /api/users/:id/matches
+
+No body. `:id` must be a positive integer.
+Query params: `limit` (default `20`, max `50`) and `offset` (default `0`) — both must be non-negative integers.
+Response `200`: `{ userId: number, matches: MatchHistoryEntry[], limit: number, offset: number }` — results ordered by `playedAt` DESC.
+`MatchHistoryEntry`: `{ matchId: number, opponentId: number, result: 'win'|'loss', myScore: number, oppScore: number, status: 'completed'|'forfeit', playedAt: string (ISO 8601) }` — `opponentId` is a raw user id; username resolution is the frontend's responsibility.
+Response `400`: `{ error: 'Invalid user id' }` — `:id` is not a positive integer.
+Response `400`: `{ error: 'limit must be a positive integer' }` — `limit` < 1 or non-numeric.
+Response `400`: `{ error: 'limit must not exceed 50' }` — `limit` > 50.
+Response `400`: `{ error: 'offset must be a non-negative integer' }` — `offset` < 0 or non-numeric.
+Response `401`: missing or invalid `x-user-id` header.

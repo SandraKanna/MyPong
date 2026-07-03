@@ -176,4 +176,156 @@ describe('user-service routes', () => {
       expect(res.json()).toMatchObject({ error: 'Missing or invalid user identity' });
     });
   });
+
+  // ── GET /:id/stats ────────────────────────────────────────────────────────────
+
+  describe('GET /:id/stats', () => {
+    it('returns zeroed defaults and winRate 0 when no stats row exists', async () => {
+      mockQuery.mockResolvedValueOnce(rows([]));
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/42/stats',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ userId: 42, gamesPlayed: 0, gamesWon: 0, highestScore: 0, winRate: 0 });
+    });
+
+    it('returns stats with correct winRate when row exists', async () => {
+      mockQuery.mockResolvedValueOnce(rows([{ games_played: 3, games_won: 2, highest_score: 11 }]));
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/42/stats',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ userId: 42, gamesPlayed: 3, gamesWon: 2, winRate: 0.6667 });
+    });
+
+    it('returns 400 for non-numeric id', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/abc/stats',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'Invalid user id' });
+    });
+
+    it('returns 400 for id = 0', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/0/stats',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'Invalid user id' });
+    });
+
+    it('returns 401 when x-user-id is missing', async () => {
+      const res = await app.inject({ method: 'GET', url: '/42/stats' });
+
+      expect(res.statusCode).toBe(401);
+      expect(res.json()).toMatchObject({ error: 'Missing or invalid user identity' });
+    });
+  });
+
+  // ── GET /:id/matches ──────────────────────────────────────────────────────────
+
+  describe('GET /:id/matches', () => {
+    const MOCK_MATCH = {
+      match_id:    7,
+      opponent_id: 17,
+      result:      'win',
+      my_score:    11,
+      opp_score:   5,
+      status:      'completed',
+      played_at:   new Date('2024-01-01T00:05:00.000Z'),
+    };
+
+    it('returns match history with default pagination (limit 20, offset 0)', async () => {
+      mockQuery.mockResolvedValueOnce(rows([MOCK_MATCH]));
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/42/matches',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.userId).toBe(42);
+      expect(body.limit).toBe(20);
+      expect(body.offset).toBe(0);
+      expect(body.matches).toHaveLength(1);
+      expect(body.matches[0]).toMatchObject({
+        matchId: 7, opponentId: 17, result: 'win', myScore: 11, oppScore: 5,
+        status: 'completed', playedAt: '2024-01-01T00:05:00.000Z',
+      });
+      // Confirm the query was issued with correct defaults.
+      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('LIMIT'), [42, 20, 0]);
+    });
+
+    it('returns match history with custom limit and offset', async () => {
+      mockQuery.mockResolvedValueOnce(rows([]));
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/42/matches?limit=5&offset=10',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.limit).toBe(5);
+      expect(body.offset).toBe(10);
+      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('LIMIT'), [42, 5, 10]);
+    });
+
+    it('returns 400 when limit exceeds 50', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/42/matches?limit=51',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'limit must not exceed 50' });
+    });
+
+    it('returns 400 for non-numeric offset', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/42/matches?offset=abc',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'offset must be a non-negative integer' });
+    });
+
+    it('returns 400 for non-numeric id', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/xyz/matches',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'Invalid user id' });
+    });
+
+    it('returns 401 when x-user-id is missing', async () => {
+      const res = await app.inject({ method: 'GET', url: '/42/matches' });
+
+      expect(res.statusCode).toBe(401);
+      expect(res.json()).toMatchObject({ error: 'Missing or invalid user identity' });
+    });
+  });
 });
