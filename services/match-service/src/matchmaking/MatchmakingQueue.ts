@@ -35,17 +35,19 @@ export class MatchmakingQueue {
         return;
       }
 
-      const players = { [first]: 'left', [second]: 'right' } as Record<number, 'left' | 'right'>;
+      const players  = { [first]: 'left', [second]: 'right' } as Record<number, 'left' | 'right'>;
+      // Computed once so both messages carry the same value.
+      const startsAt = new Date(Date.now() + 3_000).toISOString();
 
       this.send({
         type:    'match:matched',
         to:      [first, second],
-        payload: { matchId: match.id, players },
+        payload: { matchId: match.id, players, startsAt },
       });
 
       this.send({
         type:    'game:assign',
-        payload: { matchId: match.id, players },
+        payload: { matchId: match.id, players, startsAt },
       });
     }
   }

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MatchmakingQueue } from '../src/matchmaking/MatchmakingQueue';
 import type { MatchRowTs } from '../src/services/match.service';
 
@@ -23,6 +23,8 @@ describe('MatchmakingQueue', () => {
   let queue:           MatchmakingQueue;
 
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
     sent            = [];
     createMatchFn   = vi.fn();
     findActiveMatch = vi.fn().mockResolvedValue(null); // default: no active match
@@ -31,6 +33,10 @@ describe('MatchmakingQueue', () => {
       createMatchFn,
       findActiveMatch,
     );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   // ─── successful match ────────────────────────────────────────────────────────
@@ -43,17 +49,44 @@ describe('MatchmakingQueue', () => {
 
     expect(sent).toHaveLength(2);
 
-    const matched = sent[0] as { type: string; to: number[]; payload: { matchId: number; players: Record<number, string> } };
+    const matched = sent[0] as {
+      type:    string;
+      to:      number[];
+      payload: { matchId: number; players: Record<number, string>; startsAt: string };
+    };
     expect(matched.type).toBe('match:matched');
     expect(matched.to).toEqual(expect.arrayContaining([42, 17]));
     expect(matched.payload.matchId).toBe(7);
     expect(matched.payload.players).toEqual({ 42: 'left', 17: 'right' });
+    expect(typeof matched.payload.startsAt).toBe('string');
 
-    const assign = sent[1] as { type: string; to?: unknown; payload: { matchId: number; players: Record<number, string> } };
+    const assign = sent[1] as {
+      type:    string;
+      to?:     unknown;
+      payload: { matchId: number; players: Record<number, string>; startsAt: string };
+    };
     expect(assign.type).toBe('game:assign');
     expect(assign.to).toBeUndefined();
     expect(assign.payload.matchId).toBe(7);
     expect(assign.payload.players).toEqual({ 42: 'left', 17: 'right' });
+    expect(typeof assign.payload.startsAt).toBe('string');
+  });
+
+  it('startsAt is the same value in both messages and is exactly 3 seconds ahead', async () => {
+    createMatchFn.mockResolvedValueOnce(makeMatch(7, 42, 17));
+
+    await queue.handleJoin(42);
+    await queue.handleJoin(17);
+
+    const matched = sent[0] as { payload: { startsAt: string } };
+    const assign  = sent[1] as { payload: { startsAt: string } };
+
+    // Same reference value — computed once, not independently.
+    expect(matched.payload.startsAt).toBe(assign.payload.startsAt);
+
+    // Exactly 3000ms after the pinned system time.
+    const expectedStartsAt = new Date(Date.now() + 3_000).toISOString();
+    expect(matched.payload.startsAt).toBe(expectedStartsAt);
   });
 
   it('assigns left to first-queued, right to second-queued', async () => {
