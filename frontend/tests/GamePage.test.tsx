@@ -62,14 +62,14 @@ describe('GamePage — mount-time stale ended guard', () => {
     resetSpy.mockRestore();
   });
 
-  it('does not call reset() when phase is queued on mount', () => {
+  it('calls reset() when phase is queued on mount (stale queue entry cleared)', () => {
     useGameStore.setState({ phase: 'queued', myUserId: 42 });
     const resetSpy = vi.spyOn(useGameStore.getState(), 'reset');
 
     const { unmount } = render(<GamePage />);
     unmount();
 
-    expect(resetSpy).not.toHaveBeenCalled();
+    expect(resetSpy).toHaveBeenCalledOnce();
     resetSpy.mockRestore();
   });
 });
