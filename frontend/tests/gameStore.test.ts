@@ -1,6 +1,18 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useGameStore } from '../src/features/game/state/gameStore';
 import type { GameStatePayload } from '../src/shared/ws/wsMessages';
+
+// gameStore imports disconnectWs — mock it so auth-subscription tests can
+// verify it was called without opening a real WebSocket.
+vi.mock('../src/shared/ws/wsClient', () => ({
+  connectWs:    vi.fn(),
+  disconnectWs: vi.fn(),
+  sendWs:       vi.fn(),
+  onWsMessage:  vi.fn(() => vi.fn()),
+}));
+
+import { disconnectWs } from '../src/shared/ws/wsClient';
+import { useAuthStore } from '../src/features/auth/state/authState';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -18,9 +30,12 @@ function snapshot(matchId = 1): GameStatePayload {
 // Each test gets a clean store — Zustand stores are module-level singletons,
 // so reset() before every test rather than re-importing.
 beforeEach(() => {
+  vi.resetAllMocks();
   useGameStore.getState().reset();
   // reset() preserves myUserId; wipe it too for a truly clean slate
   useGameStore.setState({ phase: 'idle', myUserId: null });
+  // Restore authStore to authenticated so subscription tests start from a known state.
+  useAuthStore.setState({ status: 'authenticated', accessToken: 'tok', user: null });
 });
 
 // ── setConnected ──────────────────────────────────────────────────────────────
@@ -314,5 +329,38 @@ describe('reset', () => {
   it('can be called from idle without throwing', () => {
     expect(() => useGameStore.getState().reset()).not.toThrow();
     expect(useGameStore.getState().phase).toBe('idle');
+  });
+});
+
+// ── authStore subscription ────────────────────────────────────────────────────
+
+describe('gameStore — authStore logout subscription', () => {
+  function reachPlaying() {
+    useGameStore.getState().setConnected(42);
+    useGameStore.getState().setQueued();
+    useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
+    useGameStore.getState().startPlaying();
+  }
+
+  it('resets game store and calls disconnectWs when status transitions from authenticated to unauthenticated', () => {
+    reachPlaying();
+    expect(useGameStore.getState().phase).toBe('playing');
+
+    useAuthStore.setState({ status: 'unauthenticated', accessToken: null, user: null });
+
+    const state = useGameStore.getState();
+    expect(state.phase).toBe('idle');
+    expect(state.myUserId).toBeNull();
+    expect(vi.mocked(disconnectWs)).toHaveBeenCalledOnce();
+  });
+
+  it('does not reset the game store or call disconnectWs on a token refresh (status stays authenticated)', () => {
+    reachPlaying();
+
+    // Simulate a silent token refresh: accessToken changes, status stays 'authenticated'.
+    useAuthStore.setState({ status: 'authenticated', accessToken: 'new-token', user: null });
+
+    expect(useGameStore.getState().phase).toBe('playing');
+    expect(vi.mocked(disconnectWs)).not.toHaveBeenCalled();
   });
 });

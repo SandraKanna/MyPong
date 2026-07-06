@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import type { GameStatePayload } from '../../../shared/ws/wsMessages';
+import { useAuthStore } from '../../auth/state/authState';
+import { disconnectWs } from '../../../shared/ws/wsClient';
 
 // ── Phase shapes ──────────────────────────────────────────────────────────────
 
@@ -185,3 +187,14 @@ export const useGameStore = create<GameState & GameActions>()((set, get) => ({
     set({ phase: 'idle', myUserId: myUserId ?? null });
   },
 }));
+
+// Subscribes to authStore for the tab's lifetime — no unsubscribe needed,
+// same lifespan as the store itself. Checks `status`, not `accessToken`, so
+// a silent token refresh (accessToken changes, status stays 'authenticated')
+// never resets the game store mid-match.
+useAuthStore.subscribe((state, prevState) => {
+  if (prevState.status === 'authenticated' && state.status !== 'authenticated') {
+    disconnectWs();
+    useGameStore.setState({ phase: 'idle', myUserId: null });
+  }
+});

@@ -6,6 +6,7 @@ import LoginPage from './features/auth/pages/LoginPage';
 import RegisterPage from './features/auth/pages/RegisterPage';
 import HomePage from './features/home/pages/HomePage';
 import ProfilePage from './features/profile/pages/ProfilePage';
+import GamePage from './features/game/pages/GamePage';
 import ProtectedRoute from './shared/routes/ProtectedRoute';
 
 // STUDY: useBootstrapAuth fires a /refresh call on every page load. If the
@@ -33,6 +34,7 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/game" element={<GamePage />} />
           </Route>
         </Route>
       </Routes>
