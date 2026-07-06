@@ -74,7 +74,6 @@ interface GameActions {
   cancelQueued: () => void;
   handleMatchMatched: (matchId: number, players: Record<string, 'left' | 'right'>, startsAt: string) => void;
   handleMatchRejected: (message: string) => void;
-  startPlaying: () => void;
   handleGameState: (snapshot: GameStatePayload) => void;
   handleGamePaused: (disconnectedUserId: number, graceEndsAt: string) => void;
   handleGameResumed: (snapshot: GameStatePayload) => void;
@@ -131,25 +130,26 @@ export const useGameStore = create<GameState & GameActions>()((set, get) => ({
     set({ phase: 'idle', myUserId: state.myUserId });
   },
 
-  startPlaying() {
-    const state = get();
-    if (state.phase !== 'matched') return;
-    // JSON always serialises object keys as strings, so the lookup must use String().
-    // STUDY: `state.phase === 'matched'` already narrowed `state` to MatchedPhase above,
-    // so `state.players` and `state.myUserId` are accessible without optional chaining.
-    const mySide = state.players[String(state.myUserId)];
-    if (mySide !== 'left' && mySide !== 'right') {
-      // Guard: never write undefined into a typed field. If this fires, the
-      // phase stays 'matched' instead of advancing to 'playing' — game:end
-      // will eventually arrive for this match and move it to 'ended' anyway.
-      console.warn('[gameStore] startPlaying: myUserId not found in players map, staying in matched');
-      return;
-    }
-    set({ phase: 'playing', myUserId: state.myUserId, matchId: state.matchId, players: state.players, mySide, snapshot: null });
-  },
-
   handleGameState(snapshot) {
     const state = get();
+    if (state.phase === 'matched') {
+      // The first real game:state from the server transitions matched -> playing.
+      // CountdownOverlay is purely visual and never triggers this transition itself.
+      // This also correctly handles countdown-window forfeits: if the match ended
+      // before any game:state arrived, game:end transitions to 'ended' instead,
+      // and this branch is simply never reached.
+      // JSON always serialises object keys as strings, so the lookup must use String().
+      // STUDY: `state.phase === 'matched'` already narrowed `state` to MatchedPhase,
+      // so `state.players` and `state.myUserId` are accessible without optional chaining.
+      const mySide = state.players[String(state.myUserId)];
+      if (mySide !== 'left' && mySide !== 'right') {
+        // Guard: never write undefined into a typed field — stay in 'matched'.
+        console.warn('[gameStore] handleGameState: myUserId not found in players map, staying in matched');
+        return;
+      }
+      set({ phase: 'playing', myUserId: state.myUserId, matchId: state.matchId, players: state.players, mySide, snapshot });
+      return;
+    }
     if (state.phase === 'playing') {
       set({ ...state, snapshot });
       return;

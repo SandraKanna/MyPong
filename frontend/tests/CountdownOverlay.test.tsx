@@ -1,18 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import CountdownOverlay from '../src/features/game/components/CountdownOverlay';
-import { useGameStore } from '../src/features/game/state/gameStore';
-
-// The component calls useGameStore.getState().startPlaying() imperatively —
-// spy on it directly so we don't need to drive the store to 'matched' first.
-function spyStartPlaying() {
-  const spy = vi.fn();
-  vi.spyOn(useGameStore, 'getState').mockReturnValue({
-    ...useGameStore.getState(),
-    startPlaying: spy,
-  });
-  return spy;
-}
 
 function startsAtMs(msFromNow: number) {
   return new Date(Date.now() + msFromNow).toISOString();
@@ -43,29 +31,24 @@ describe('CountdownOverlay', () => {
     expect(screen.getByText('1')).toBeDefined();
   });
 
-  it('calls startPlaying() when the countdown reaches 0', () => {
-    const startPlaying = spyStartPlaying();
-    render(<CountdownOverlay startsAt={startsAtMs(3_000)} />);
-
-    act(() => { vi.advanceTimersByTime(3_000); });
-
-    expect(startPlaying).toHaveBeenCalledOnce();
-  });
-
-  it('does not call startPlaying() before the countdown reaches 0', () => {
-    const startPlaying = spyStartPlaying();
-    render(<CountdownOverlay startsAt={startsAtMs(3_000)} />);
-
-    act(() => { vi.advanceTimersByTime(2_000); });
-
-    expect(startPlaying).not.toHaveBeenCalled();
-  });
-
   it('displays 0 (not negative) after the deadline passes', () => {
     render(<CountdownOverlay startsAt={startsAtMs(1_000)} />);
 
     act(() => { vi.advanceTimersByTime(2_000); });
 
+    expect(screen.getByText('0')).toBeDefined();
+  });
+
+  it('stops ticking after reaching 0 — interval is cleared, no further updates', () => {
+    // Spy on setInterval/clearInterval to verify the interval is cancelled at zero.
+    const clearSpy = vi.spyOn(global, 'clearInterval');
+    render(<CountdownOverlay startsAt={startsAtMs(1_000)} />);
+
+    act(() => { vi.advanceTimersByTime(1_000); }); // reaches 0, clearInterval should fire
+    expect(clearSpy).toHaveBeenCalled();
+
+    // Advancing further should not change the displayed value.
+    act(() => { vi.advanceTimersByTime(5_000); });
     expect(screen.getByText('0')).toBeDefined();
   });
 });

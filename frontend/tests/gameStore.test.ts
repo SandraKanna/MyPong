@@ -53,7 +53,7 @@ describe('setConnected', () => {
     useGameStore.getState().setConnected(42);
     useGameStore.getState().setQueued();
     useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
-    useGameStore.getState().startPlaying();
+    useGameStore.getState().handleGameState(snapshot(1)); // matched → playing via first game:state frame
     expect(useGameStore.getState().phase).toBe('playing');
 
     useGameStore.getState().setConnected(42); // reconnect-triggered 'connected' message
@@ -138,28 +138,34 @@ describe('handleMatchRejected', () => {
   });
 });
 
-// ── startPlaying ──────────────────────────────────────────────────────────────
+// ── handleGameState ───────────────────────────────────────────────────────────
 
-describe('startPlaying', () => {
+describe('handleGameState', () => {
   function reachMatched(userId = 42, players = PLAYERS) {
     useGameStore.getState().setConnected(userId);
     useGameStore.getState().setQueued();
     useGameStore.getState().handleMatchMatched(1, players, '2025-01-01T00:00:03Z');
   }
 
-  it('transitions matched → playing and resolves mySide correctly for left player', () => {
+  function reachPlaying() {
+    reachMatched();
+    useGameStore.getState().handleGameState(snapshot(1)); // matched → playing via first frame
+  }
+
+  it('transitions matched → playing with correct mySide (left) and the incoming snapshot', () => {
     reachMatched(42);
-    useGameStore.getState().startPlaying();
+    const s = snapshot(1);
+    useGameStore.getState().handleGameState(s);
     const state = useGameStore.getState();
     expect(state.phase).toBe('playing');
     if (state.phase !== 'playing') return;
     expect(state.mySide).toBe('left');
-    expect(state.snapshot).toBeNull();
+    expect(state.snapshot).toEqual(s); // snapshot from server, not null
   });
 
-  it('resolves mySide as right for the right player', () => {
+  it('transitions matched → playing with mySide right for the right player', () => {
     reachMatched(17);
-    useGameStore.getState().startPlaying();
+    useGameStore.getState().handleGameState(snapshot(1));
     const state = useGameStore.getState();
     expect(state.phase).toBe('playing');
     if (state.phase !== 'playing') return;
@@ -168,25 +174,9 @@ describe('startPlaying', () => {
 
   it('stays in matched and does not throw when myUserId is not in players map', () => {
     reachMatched(99); // userId 99 not in PLAYERS
-    expect(() => useGameStore.getState().startPlaying()).not.toThrow();
+    expect(() => useGameStore.getState().handleGameState(snapshot(1))).not.toThrow();
     expect(useGameStore.getState().phase).toBe('matched');
   });
-
-  it('is a no-op when not in matched', () => {
-    useGameStore.getState().startPlaying();
-    expect(useGameStore.getState().phase).toBe('idle');
-  });
-});
-
-// ── handleGameState ───────────────────────────────────────────────────────────
-
-describe('handleGameState', () => {
-  function reachPlaying() {
-    useGameStore.getState().setConnected(42);
-    useGameStore.getState().setQueued();
-    useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
-    useGameStore.getState().startPlaying();
-  }
 
   it('updates snapshot in playing phase', () => {
     reachPlaying();
@@ -224,7 +214,7 @@ describe('handleGamePaused', () => {
     useGameStore.getState().setConnected(42);
     useGameStore.getState().setQueued();
     useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
-    useGameStore.getState().startPlaying();
+    useGameStore.getState().handleGameState(snapshot(1)); // matched → playing via first game:state frame
   }
 
   it('transitions playing → paused with correct fields', () => {
@@ -251,7 +241,7 @@ describe('handleGameResumed', () => {
     useGameStore.getState().setConnected(42);
     useGameStore.getState().setQueued();
     useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
-    useGameStore.getState().startPlaying();
+    useGameStore.getState().handleGameState(snapshot(1)); // matched → playing via first game:state frame
     useGameStore.getState().handleGamePaused(17, '2025-01-01T00:00:08Z');
   }
 
@@ -279,7 +269,7 @@ describe('handleGameEnd', () => {
     useGameStore.getState().setConnected(42);
     useGameStore.getState().setQueued();
     useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
-    useGameStore.getState().startPlaying();
+    useGameStore.getState().handleGameState(snapshot(1)); // matched → playing via first game:state frame
   }
 
   it('transitions playing → ended with correct fields', () => {
@@ -317,7 +307,7 @@ describe('reset', () => {
     useGameStore.getState().setConnected(42);
     useGameStore.getState().setQueued();
     useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
-    useGameStore.getState().startPlaying();
+    useGameStore.getState().handleGameState(snapshot(1)); // matched → playing via first game:state frame
     expect(useGameStore.getState().phase).toBe('playing');
 
     useGameStore.getState().reset();
@@ -339,7 +329,7 @@ describe('gameStore — authStore logout subscription', () => {
     useGameStore.getState().setConnected(42);
     useGameStore.getState().setQueued();
     useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
-    useGameStore.getState().startPlaying();
+    useGameStore.getState().handleGameState(snapshot(1)); // matched → playing via first game:state frame
   }
 
   it('resets game store and calls disconnectWs when status transitions from authenticated to unauthenticated', () => {

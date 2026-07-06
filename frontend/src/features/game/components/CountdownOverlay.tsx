@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useGameStore } from '../state/gameStore';
 
 interface CountdownOverlayProps {
   startsAt: string; // ISO timestamp from match:matched — raw server value, we compute remaining time locally
@@ -30,12 +29,9 @@ export default function CountdownOverlay({ startsAt }: CountdownOverlayProps) {
       // reading a stale `remaining` state value from before this tick.
       const next = Math.ceil((new Date(startsAt).getTime() - Date.now()) / 1000);
       setRemaining(next);
-      if (next <= 0) {
-        clearInterval(id);
-        // STUDY: getState() bypasses the React subscription model — we don't
-        // need a re-render here, just a one-shot imperative call when the timer fires.
-        useGameStore.getState().startPlaying();
-      }
+      // Stop the interval at zero — the transition to 'playing' is triggered by
+      // the first real game:state frame from the server, not by this local timer.
+      if (next <= 0) clearInterval(id);
     }, 1000);
 
     return () => clearInterval(id); // cleanup: stop the interval on unmount or startsAt change
