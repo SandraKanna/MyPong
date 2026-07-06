@@ -83,8 +83,9 @@ export function connectWs(): void {
 }
 
 export function disconnectWs(): void {
-  // stopped must be set BEFORE socket.close() — jsdom fires onclose
-  // synchronously, so the reconnect branch must already be suppressed.
+  // stopped must be set BEFORE socket.close() — some environments (including
+  // the test mocks) fire onclose synchronously from close(), so the reconnect
+  // branch must already be suppressed by the time it runs. Safe in all cases.
   stopped = true;
   clearTimeout(reconnectTimer ?? undefined);
   reconnectTimer = null;
