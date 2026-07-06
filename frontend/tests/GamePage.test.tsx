@@ -25,7 +25,7 @@ beforeEach(() => {
   vi.mocked(onWsMessage).mockReturnValue(vi.fn());
 });
 
-describe('GamePage — mount-time stale ended guard', () => {
+describe('GamePage — mount-time stale phase guard (queued/ended)', () => {
   it('calls reset() before connectWs() when phase is already ended', () => {
     // Drive the store to 'ended' to simulate a leftover result from a previous match.
     useGameStore.setState({
