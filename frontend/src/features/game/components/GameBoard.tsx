@@ -34,6 +34,7 @@ export default function GameBoard() {
     // ignores input anyway, but not attaching is the cleaner contract — we
     // don't send meaningless messages we know the server will discard.
     if (phase !== 'playing' || matchId === null) return;
+    const activeMatchId: number = matchId; // narrows null away for the closures below
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
@@ -43,7 +44,7 @@ export default function GameBoard() {
       pressedKeys.current.add(e.key);
       sendWs({
         type: 'game:input',
-        payload: { matchId, direction: e.key === 'ArrowUp' ? 'up' : 'down' },
+        payload: { matchId: activeMatchId, direction: e.key === 'ArrowUp' ? 'up' : 'down' },
       });
     }
 
@@ -53,7 +54,7 @@ export default function GameBoard() {
       // Send 'stop' only when no relevant key remains held — handles the
       // edge case of both arrow keys pressed simultaneously.
       if (pressedKeys.current.size === 0) {
-        sendWs({ type: 'game:input', payload: { matchId, direction: 'stop' } });
+        sendWs({ type: 'game:input', payload: { matchId: activeMatchId, direction: 'stop' } });
       }
     }
 
@@ -70,7 +71,7 @@ export default function GameBoard() {
       // resume() — so this explicit stop is required, not just defensive.
       // sendWs is a safe no-op if the socket is already closed.
       if (pressedKeys.current.size > 0) {
-        sendWs({ type: 'game:input', payload: { matchId, direction: 'stop' } });
+        sendWs({ type: 'game:input', payload: { matchId: activeMatchId, direction: 'stop' } });
         pressedKeys.current.clear();
       }
     };
