@@ -5,6 +5,7 @@ import LobbyView from '../components/LobbyView';
 import CountdownOverlay from '../components/CountdownOverlay';
 import GameBoard from '../components/GameBoard';
 import PauseOverlay from '../components/PauseOverlay';
+import ResultScreen from '../components/ResultScreen';
 
 export default function GamePage() {
   // STUDY: useGameStore with a selector — the component re-renders only when
@@ -106,6 +107,5 @@ export default function GamePage() {
     );
   }
 
-  // phase === 'ended'
-  return <p>Result screen — next piece</p>;
+  return <ResultScreen />;
 }
