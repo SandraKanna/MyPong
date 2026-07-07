@@ -188,22 +188,29 @@ describe('handleGameState', () => {
     expect(state.snapshot).toEqual(s);
   });
 
-  it('transitions paused → playing (countdown-window reconnect case)', () => {
-    reachPlaying();
-    useGameStore.getState().handleGamePaused(17, '2025-01-01T00:00:08Z');
-    expect(useGameStore.getState().phase).toBe('paused');
-
-    const s = snapshot(1);
-    useGameStore.getState().handleGameState(s);
-    const state = useGameStore.getState();
-    expect(state.phase).toBe('playing');
-    if (state.phase !== 'playing') return;
-    expect(state.snapshot).toEqual(s);
-  });
-
   it('is a no-op when in idle', () => {
     useGameStore.getState().handleGameState(snapshot());
     expect(useGameStore.getState().phase).toBe('idle');
+  });
+
+  it('is a no-op when paused — frozen frames from the tick loop do not evict PauseOverlay', () => {
+    reachPlaying();
+    const originalSnapshot = snapshot(1);
+    useGameStore.getState().handleGameState(originalSnapshot);
+    useGameStore.getState().handleGamePaused(17, '2025-01-01T00:00:08Z');
+    expect(useGameStore.getState().phase).toBe('paused');
+
+    // Simulate several frozen game:state frames arriving during the grace window.
+    const frozenFrame = { matchId: 1, ball: { x: 99, y: 99 }, paddles: { leftY: 99, rightY: 99 }, score: { left: 0, right: 0 } };
+    useGameStore.getState().handleGameState(frozenFrame);
+    useGameStore.getState().handleGameState(frozenFrame);
+    useGameStore.getState().handleGameState(frozenFrame);
+
+    const state = useGameStore.getState();
+    expect(state.phase).toBe('paused');
+    // Snapshot must not have been updated by the frozen frames.
+    if (state.phase !== 'paused') return;
+    expect(state.snapshot).toEqual(originalSnapshot);
   });
 });
 

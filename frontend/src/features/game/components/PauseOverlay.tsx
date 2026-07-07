@@ -30,15 +30,18 @@ export default function PauseOverlay() {
 
   return (
     <div style={{
-      position: 'absolute', top: '50%', left: '50%',
-      transform: 'translate(-50%, -50%)',
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      background: '#b91c1c', color: '#fff',
-      padding: '2rem 3rem', borderRadius: '8px',
+      position: 'fixed', inset: 0,
+      background: 'rgba(0,0,0,0.75)', zIndex: 100,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <p>Player {disconnectedUserId} disconnected</p>
-      <p>Waiting for reconnect… {Math.max(remaining, 0)}s</p>
+      <div style={{
+        background: '#1a1a1a', color: '#fff',
+        padding: '2rem 3rem', borderRadius: '12px', textAlign: 'center',
+      }}>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>Paused</h2>
+        <p>Player {disconnectedUserId} disconnected</p>
+        <p>Waiting for reconnect… {Math.max(remaining, 0)}s</p>
+      </div>
     </div>
   );
 }
