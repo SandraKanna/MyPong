@@ -79,7 +79,7 @@ export default function GameBoard() {
   // listeners 60 times per second, risking dropped keystrokes in the gap.
   // matchId is read at effect-setup time; snapshot is read from the store
   // directly inside sendWs calls so no closure staleness issue arises.
-  }, [phase, matchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, matchId]);
 
   if (!snapshot) return null;
 
