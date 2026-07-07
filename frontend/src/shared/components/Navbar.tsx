@@ -22,6 +22,7 @@ export default function Navbar() {
           client-side route change instead of a full page reload. This is what
           makes React apps feel fast — the browser never re-fetches the HTML. */}
       <Link to="/">MyPong</Link>
+      <Link to="/game">Play</Link>
       <Link to="/profile">Profile</Link>
       <button onClick={() => void handleLogout()}>Logout</button>
     </nav>

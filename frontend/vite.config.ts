@@ -22,6 +22,14 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      // /ws is handled by gateway-ws in prod (via nginx) and by this proxy in dev.
+      // ws:true tells Vite to forward the HTTP→WS Upgrade handshake; without it
+      // the entry is treated as HTTP-only and the connection silently fails.
+      '/ws': {
+        target: 'ws://localhost:4500',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
   test: {
