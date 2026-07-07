@@ -3,6 +3,8 @@ import { connectWs, disconnectWs, onWsMessage, sendWs } from '../../../shared/ws
 import { useGameStore } from '../state/gameStore';
 import LobbyView from '../components/LobbyView';
 import CountdownOverlay from '../components/CountdownOverlay';
+import GameBoard from '../components/GameBoard';
+import PauseOverlay from '../components/PauseOverlay';
 
 export default function GamePage() {
   // STUDY: useGameStore with a selector — the component re-renders only when
@@ -89,8 +91,19 @@ export default function GamePage() {
     return <CountdownOverlay startsAt={startsAt} />;
   }
 
-  if (phase === 'playing' || phase === 'paused') {
-    return <p>Game board — next piece</p>;
+  if (phase === 'playing') {
+    return <GameBoard />;
+  }
+
+  if (phase === 'paused') {
+    // STUDY: position:relative on the wrapper lets PauseOverlay use
+    // position:absolute to fill the same bounding box as GameBoard.
+    return (
+      <div style={{ position: 'relative' }}>
+        <GameBoard />
+        <PauseOverlay />
+      </div>
+    );
   }
 
   // phase === 'ended'
