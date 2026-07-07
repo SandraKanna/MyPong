@@ -294,6 +294,21 @@ describe('handleGameEnd', () => {
     expect(state.reason).toBe('forfeit');
   });
 
+  it('transitions matched → ended (forfeit during countdown window)', () => {
+    useGameStore.getState().setConnected(42);
+    useGameStore.getState().setQueued();
+    useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
+    // No game:state arrives — match ends before the countdown completes (e.g. opponent forfeits)
+    useGameStore.getState().handleGameEnd(42, 'forfeit', { left: 0, right: 0 });
+    const state = useGameStore.getState();
+    expect(state.phase).toBe('ended');
+    if (state.phase !== 'ended') return;
+    expect(state.winnerId).toBe(42);
+    expect(state.reason).toBe('forfeit');
+    expect(state.score).toEqual({ left: 0, right: 0 });
+    expect(state.players).toEqual(PLAYERS);
+  });
+
   it('is a no-op when in idle (invalid transition guard)', () => {
     useGameStore.getState().handleGameEnd(42, 'completed', { left: 11, right: 3 });
     expect(useGameStore.getState().phase).toBe('idle');

@@ -176,7 +176,7 @@ export const useGameStore = create<GameState & GameActions>()((set, get) => ({
 
   handleGameEnd(winnerId, reason, score) {
     const state = get();
-    if (state.phase !== 'playing' && state.phase !== 'paused') return;
+    if (state.phase !== 'playing' && state.phase !== 'paused' && state.phase !== 'matched') return;
     set({ phase: 'ended', myUserId: state.myUserId, winnerId, reason, score, players: state.players });
   },
 
