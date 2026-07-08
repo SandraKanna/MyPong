@@ -25,7 +25,7 @@ beforeEach(() => {
   vi.mocked(onWsMessage).mockReturnValue(vi.fn());
 });
 
-describe('GamePage — mount-time stale phase guard (queued/ended)', () => {
+describe('GamePage — mount-time stale phase guard (queued/matched/ended)', () => {
   it('calls reset() before connectWs() when phase is already ended', () => {
     // Drive the store to 'ended' to simulate a leftover result from a previous match.
     useGameStore.setState({
@@ -64,6 +64,23 @@ describe('GamePage — mount-time stale phase guard (queued/ended)', () => {
 
   it('calls reset() when phase is queued on mount (stale queue entry cleared)', () => {
     useGameStore.setState({ phase: 'queued', myUserId: 42 });
+    const resetSpy = vi.spyOn(useGameStore.getState(), 'reset');
+
+    const { unmount } = render(<GamePage />);
+    unmount();
+
+    expect(resetSpy).toHaveBeenCalledOnce();
+    resetSpy.mockRestore();
+  });
+
+  it('calls reset() when phase is matched on mount (frozen countdown cleared)', () => {
+    useGameStore.setState({
+      phase:    'matched',
+      myUserId: 42,
+      matchId:  1,
+      players:  { '42': 'left', '17': 'right' },
+      startsAt: new Date(Date.now() - 5000).toISOString(), // countdown already expired
+    });
     const resetSpy = vi.spyOn(useGameStore.getState(), 'reset');
 
     const { unmount } = render(<GamePage />);

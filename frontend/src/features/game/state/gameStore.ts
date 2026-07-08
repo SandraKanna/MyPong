@@ -152,14 +152,12 @@ export const useGameStore = create<GameState & GameActions>()((set, get) => ({
     }
     if (state.phase === 'playing') {
       set({ ...state, snapshot });
-      return;
     }
-    if (state.phase === 'paused') {
-      // Also handles the countdown-window reconnect case: game:resumed is never
-      // sent after a countdown disconnect, so the first game:state frame is what
-      // closes the pause overlay and resumes play.
-      set({ phase: 'playing', myUserId: state.myUserId, matchId: state.matchId, players: state.players, mySide: state.mySide, snapshot });
-    }
+    // 'paused' intentionally falls through as a no-op — game-service keeps
+    // streaming frozen game:state frames during the grace window (physics are
+    // suspended but the tick loop continues). Accepting them here would evict
+    // PauseOverlay after a single tick (~16ms). The only exits from 'paused'
+    // are handleGameResumed (opponent reconnects) and handleGameEnd (forfeit).
   },
 
   handleGamePaused(disconnectedUserId, graceEndsAt) {

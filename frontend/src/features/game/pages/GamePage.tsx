@@ -31,7 +31,7 @@ export default function GamePage() {
     // match, clear the stale phase so the lobby shows fresh instead of a
     // leftover "Looking for an opponent…" or result screen.
     const staleOnMount = useGameStore.getState().phase;
-    if (staleOnMount === 'queued' || staleOnMount === 'ended') {
+    if (staleOnMount === 'queued' || staleOnMount === 'ended' || staleOnMount === 'matched') {
       useGameStore.getState().reset();
     }
     connectWs();
@@ -97,13 +97,11 @@ export default function GamePage() {
   }
 
   if (phase === 'paused') {
-    // STUDY: position:relative on the wrapper lets PauseOverlay use
-    // position:absolute to fill the same bounding box as GameBoard.
     return (
-      <div style={{ position: 'relative' }}>
+      <>
         <GameBoard />
         <PauseOverlay />
-      </div>
+      </>
     );
   }
 
