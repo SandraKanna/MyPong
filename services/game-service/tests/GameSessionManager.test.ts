@@ -436,4 +436,118 @@ describe('GameSessionManager', () => {
     const ep = endMsg!.payload as { winnerId: number };
     expect(ep.winnerId).toBe(17); // opponent of first disconnector wins
   });
+
+  // ─── handlePlayerLeave ───────────────────────────────────────────────────────
+
+  it('handlePlayerLeave on an active session forfeits immediately with no grace window', () => {
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
+
+    manager.handlePlayerLeave(42); // 42 leaves — 17 should win
+
+    expect(manager.sessionCount()).toBe(0);
+    expect(manager.getSession(1)).toBeUndefined();
+    expect(sent.find((m) => m.type === 'game:paused')).toBeUndefined();
+
+    const resultMsg = sent.find((m) => m.type === 'match:result');
+    expect(resultMsg).toBeDefined();
+    expect(resultMsg!.to).toBeUndefined();
+    const rp = resultMsg!.payload as { winnerId: number; status: string };
+    expect(rp.winnerId).toBe(17);
+    expect(rp.status).toBe('forfeit');
+
+    const endMsg = sent.find((m) => m.type === 'game:end');
+    expect(endMsg).toBeDefined();
+    const ep = endMsg!.payload as { winnerId: number; reason: string };
+    expect(ep.winnerId).toBe(17);
+    expect(ep.reason).toBe('forfeit');
+  });
+
+  it('handlePlayerLeave emits forfeit with the real score at the time of leave, not 0-0', () => {
+    manager = new GameSessionManager(
+      (msg) => sent.push(msg),
+      { gameFactory: () => new Game({ maxScore: 10 }) },
+    );
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
+    // Ball positioned to score on the next tick (right wall exit → left scores).
+    manager.getSession(1)!.game.ball.reset(795, 50, 10, 0);
+    vi.advanceTimersByTime(16); // score is now { left: 1, right: 0 }
+    sent.length = 0; // clear game:state messages
+
+    manager.handlePlayerLeave(42);
+
+    const resultMsg = sent.find((m) => m.type === 'match:result');
+    expect(resultMsg).toBeDefined();
+    const rp = resultMsg!.payload as { score: { left: number; right: number } };
+    expect(rp.score).toEqual({ left: 1, right: 0 }); // real score, not 0-0
+  });
+
+  it('handlePlayerLeave during countdown delegates to handlePlayerDisconnect — fires forfeit at startsAt', () => {
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    const startsAt = new Date(Date.now() + 3_000).toISOString();
+
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }, startsAt));
+    manager.handlePlayerLeave(42);
+
+    // Same as a passive disconnect: game:paused sent to opponent immediately.
+    const pausedMsg = sent.find((m) => m.type === 'game:paused');
+    expect(pausedMsg).toBeDefined();
+    expect(pausedMsg!.to).toEqual([17]);
+
+    // Forfeit does not fire immediately — it fires when the countdown completes.
+    expect(sent.find((m) => m.type === 'match:result')).toBeUndefined();
+
+    vi.advanceTimersByTime(3_000);
+
+    expect(manager.sessionCount()).toBe(0);
+    const resultMsg = sent.find((m) => m.type === 'match:result');
+    expect(resultMsg).toBeDefined();
+    const rp = resultMsg!.payload as { winnerId: number; status: string; score: { left: number; right: number } };
+    expect(rp.winnerId).toBe(17);
+    expect(rp.status).toBe('forfeit');
+    expect(rp.score).toEqual({ left: 0, right: 0 }); // nothing was played
+  });
+
+  it('handlePlayerLeave with userId not in any session or pending match is a no-op', () => {
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
+
+    expect(() => manager.handlePlayerLeave(99)).not.toThrow();
+    expect(sent.filter((m) => m.type === 'match:result' || m.type === 'game:paused')).toHaveLength(0);
+    expect(manager.sessionCount()).toBe(1);
+  });
+
+  it('player:disconnect after handlePlayerLeave for the same active session is a no-op', () => {
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
+
+    manager.handlePlayerLeave(42);
+    const countAfterLeave = sent.length;
+
+    // Socket closes right after — gateway-ws fires player:disconnect for the same user.
+    manager.handlePlayerDisconnect(42);
+
+    expect(sent.length).toBe(countAfterLeave); // no additional messages
+    expect(manager.sessionCount()).toBe(0);
+  });
+
+  it('handlePlayerLeave cancels the opponent grace timer and emits a single forfeit', () => {
+    manager = new GameSessionManager((msg) => sent.push(msg), { gracePeriodMs: 5_000 });
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
+
+    // Opponent disconnects — grace timer is now armed.
+    manager.handlePlayerDisconnect(42);
+    sent.length = 0;
+
+    // Remaining player explicitly leaves.
+    manager.handlePlayerLeave(17);
+
+    // Forfeit sent immediately; remaining player (17) is the loser.
+    const resultMsg = sent.find((m) => m.type === 'match:result');
+    expect(resultMsg).toBeDefined();
+    const rp = resultMsg!.payload as { winnerId: number };
+    expect(rp.winnerId).toBe(42); // disconnected opponent wins because the remaining player left
+
+    // Grace timer must have been cancelled — no second forfeit after the deadline.
+    const countNow = sent.length;
+    vi.advanceTimersByTime(6_000);
+    expect(sent.length).toBe(countNow);
+  });
 });

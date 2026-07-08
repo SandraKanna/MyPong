@@ -196,6 +196,24 @@ export class GameSessionManager {
     }
   }
 
+  handlePlayerLeave(userId: number): void {
+    // Active session: forfeit immediately, no grace window, no game:paused to opponent.
+    for (const [matchId, session] of this.sessions) {
+      if (!session.players.has(userId)) continue;
+      // Cancel any grace timer already armed from the opponent's prior disconnect to prevent a double forfeit.
+      clearTimeout(session.disconnectTimer);
+      clearInterval(session.interval);
+      this.sessions.delete(matchId);
+      const { score } = session.game.getState();
+      this.emitForfeit(matchId, session.players, session.userIds, userId, score, session.startedAt);
+      return;
+    }
+
+    // Pending session: reuse the existing passive-disconnect path.
+    // startSession already fires emitForfeit at startsAt — exactly one call site, no new fields needed.
+    this.handlePlayerDisconnect(userId);
+  }
+
   handlePlayerConnect(userId: number): void {
     // ── Active session ───────────────────────────────────────────────────────────
     for (const [matchId, session] of this.sessions.entries()) {
