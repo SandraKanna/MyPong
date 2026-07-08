@@ -11,7 +11,7 @@ vi.mock('../src/shared/ws/wsClient', () => ({
   onWsMessage:  vi.fn(() => vi.fn()),
 }));
 
-import { disconnectWs } from '../src/shared/ws/wsClient';
+import { disconnectWs, sendWs } from '../src/shared/ws/wsClient';
 import { useAuthStore } from '../src/features/auth/state/authState';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -354,7 +354,7 @@ describe('gameStore — authStore logout subscription', () => {
     useGameStore.getState().handleGameState(snapshot(1)); // matched → playing via first game:state frame
   }
 
-  it('resets game store and calls disconnectWs when status transitions from authenticated to unauthenticated', () => {
+  it('resets game store, sends game:leave, and calls disconnectWs on logout while playing', () => {
     reachPlaying();
     expect(useGameStore.getState().phase).toBe('playing');
 
@@ -363,7 +363,65 @@ describe('gameStore — authStore logout subscription', () => {
     const state = useGameStore.getState();
     expect(state.phase).toBe('idle');
     expect(state.myUserId).toBeNull();
+    expect(vi.mocked(sendWs)).toHaveBeenCalledWith({ type: 'game:leave' });
     expect(vi.mocked(disconnectWs)).toHaveBeenCalledOnce();
+  });
+
+  it('sends match:cancel on logout when phase is queued', () => {
+    useGameStore.getState().setConnected(42);
+    useGameStore.getState().setQueued();
+
+    useAuthStore.setState({ status: 'unauthenticated', accessToken: null, user: null });
+
+    expect(vi.mocked(sendWs)).toHaveBeenCalledWith({ type: 'match:cancel' });
+    expect(vi.mocked(sendWs)).not.toHaveBeenCalledWith({ type: 'game:leave' });
+  });
+
+  it('sends game:leave on logout when phase is matched', () => {
+    useGameStore.getState().setConnected(42);
+    useGameStore.getState().setQueued();
+    useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
+
+    useAuthStore.setState({ status: 'unauthenticated', accessToken: null, user: null });
+
+    expect(vi.mocked(sendWs)).toHaveBeenCalledWith({ type: 'game:leave' });
+  });
+
+  it('sends game:leave on logout when phase is paused', () => {
+    reachPlaying();
+    useGameStore.getState().handleGamePaused(17, '2025-01-01T00:00:08Z');
+
+    useAuthStore.setState({ status: 'unauthenticated', accessToken: null, user: null });
+
+    expect(vi.mocked(sendWs)).toHaveBeenCalledWith({ type: 'game:leave' });
+  });
+
+  it('sends nothing on logout when phase is idle', () => {
+    expect(useGameStore.getState().phase).toBe('idle');
+
+    useAuthStore.setState({ status: 'unauthenticated', accessToken: null, user: null });
+
+    expect(vi.mocked(sendWs)).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing on logout when phase is ended', () => {
+    reachPlaying();
+    useGameStore.getState().handleGameEnd(42, 'completed', { left: 11, right: 3 });
+
+    useAuthStore.setState({ status: 'unauthenticated', accessToken: null, user: null });
+
+    expect(vi.mocked(sendWs)).not.toHaveBeenCalled();
+  });
+
+  it('calls sendWs before disconnectWs on logout', () => {
+    reachPlaying();
+    const callOrder: string[] = [];
+    vi.mocked(sendWs).mockImplementation(() => { callOrder.push('sendWs'); });
+    vi.mocked(disconnectWs).mockImplementation(() => { callOrder.push('disconnectWs'); });
+
+    useAuthStore.setState({ status: 'unauthenticated', accessToken: null, user: null });
+
+    expect(callOrder).toEqual(['sendWs', 'disconnectWs']);
   });
 
   it('does not reset the game store or call disconnectWs on a token refresh (status stays authenticated)', () => {

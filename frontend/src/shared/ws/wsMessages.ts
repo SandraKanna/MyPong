@@ -34,6 +34,7 @@ export type IncomingMessage =
 
 export type MatchJoinMessage   = { type: 'match:join' };
 export type MatchCancelMessage = { type: 'match:cancel' };
+export type GameLeaveMessage   = { type: 'game:leave' };
 export type GameInputMessage   = { type: 'game:input'; payload: { matchId: number; direction: 'up' | 'down' | 'stop' } };
 
-export type OutgoingMessage = MatchJoinMessage | MatchCancelMessage | GameInputMessage;
+export type OutgoingMessage = MatchJoinMessage | MatchCancelMessage | GameLeaveMessage | GameInputMessage;

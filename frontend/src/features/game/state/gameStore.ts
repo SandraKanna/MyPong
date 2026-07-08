@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { GameStatePayload } from '../../../shared/ws/wsMessages';
 import { useAuthStore } from '../../auth/state/authState';
-import { disconnectWs } from '../../../shared/ws/wsClient';
+import { disconnectWs, sendWs } from '../../../shared/ws/wsClient';
 
 // ── Phase shapes ──────────────────────────────────────────────────────────────
 
@@ -192,6 +192,12 @@ export const useGameStore = create<GameState & GameActions>()((set, get) => ({
 // never resets the game store mid-match.
 useAuthStore.subscribe((state, prevState) => {
   if (prevState.status === 'authenticated' && state.status !== 'authenticated') {
+    const phase = useGameStore.getState().phase;
+    if (phase === 'queued') {
+      sendWs({ type: 'match:cancel' });
+    } else if (phase === 'matched' || phase === 'playing' || phase === 'paused') {
+      sendWs({ type: 'game:leave' });
+    }
     disconnectWs();
     useGameStore.setState({ phase: 'idle', myUserId: null });
   }
