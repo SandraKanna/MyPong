@@ -1,32 +1,32 @@
 # gateway-api
 
-REST gateway: validates JWT access tokens and proxies authenticated requests to
-upstream services. The only entry point for the frontend — no business logic,
-no database.
+REST gateway: validates JWT access tokens and proxies authenticated requests to upstream services. The only entry point for the frontend — no business logic, no database.
 
 ## Endpoints
 
-All routes are under `/api/`. Public routes pass through without JWT validation;
-protected routes require a valid `Authorization: Bearer <access_token>` header.
+All routes are under `/api/`. Public routes pass through without JWT validation; protected routes require a valid `Authorization: Bearer <access_token>` header.
 
-| Method   | Path                   | Target       | Auth required |
-|----------|------------------------|--------------|---------------|
-| `GET`    | `/health`              | gateway-api  | No            |
-| `POST`   | `/api/auth/register`   | auth-service | No            |
-| `POST`   | `/api/auth/login`      | auth-service | No            |
-| `POST`   | `/api/auth/refresh`    | auth-service | No            |
-| `DELETE` | `/api/auth/session`    | auth-service | No            |
-| `GET`    | `/api/users/*`         | user-service | **Yes**       |
+| Method   | Path                     | Target       | Auth required |
+|----------|--------------------------|--------------|---------------|
+| `GET`    | `/health`                | gateway-api  | No            |
+| `POST`   | `/api/auth/register`     | auth-service | No            |
+| `POST`   | `/api/auth/login`        | auth-service | No            |
+| `POST`   | `/api/auth/refresh`      | auth-service | No            |
+| `DELETE` | `/api/auth/session`      | auth-service | No            |
+| `GET`    | `/api/users/me`          | user-service | **Yes**       |
+| `PATCH`  | `/api/users/me`          | user-service | **Yes**       |
+| `POST`   | `/api/users/me/avatar`   | user-service | **Yes**       |
+| `GET`    | `/api/users/:id/stats`   | user-service | **Yes**       |
+| `GET`    | `/api/users/:id/matches` | user-service | **Yes**       |
 
-The `/api/auth` prefix is stripped before proxying — auth-service receives
-`/register`, `/login`, etc. (see [auth-service README](../auth-service/README.md)).
+The `/api/auth` prefix is stripped before proxying — auth-service receives `/register`, `/login`, etc. (see [auth-service README](../auth-service/README.md)).
+The `/api/users` prefix is stripped similarly — user-service receives `/me`, `/:id/stats`, etc.
 
 ## Testing
 
 ### Unit tests
 
-Independent of the Docker/native choice below — these mock the JWT plugin and
-the upstream proxy, no service needs to be running.
+Independent of the Docker/native choice below — these mock the JWT plugin and the upstream proxy, no service needs to be running.
 
 ```bash
 cd services/gateway-api
@@ -39,11 +39,12 @@ npm test
 Assumes the root `.env` is already set up (see the [root README](../../README.md#prerequisites)).
 
 ```bash
-make up   # starts postgres + auth-service + gateway-api
+make up   # starts the full stack (all 8 services available today)
 ```
 
-Published on the host as `4010:4000` (port 4000 is commonly taken on macOS
-by the Nx daemon, `nxd`) — the container still listens on 4000 internally.
+gateway-api is normally reached only through nginx (`/api/*`) — no other service or the browser should call it directly. The host port mapping below is a deliberate, temporary exception for two dev-time needs: the native Vite proxy (`/api` → `:4010` in `vite.config.ts`) when running the frontend outside Docker, and this service's own smoke test. It's tracked for removal once both of those go through nginx instead (see the `TODO` above `gateway-api`'s `ports:` in `docker-compose.yml`).
+
+Published on the host as `4010:4000` (port 4000 is commonly taken on macOS by the Nx daemon, `nxd`) — the container still listens on 4000 internally.
 
 The database starts empty — run migrations once:
 
@@ -55,8 +56,8 @@ gateway-api is available at `http://localhost:4010` once started.
 
 ### Local (native)
 
-gateway-api runs with Node; auth-service and Postgres run via `make up`. Stop
-the Docker gateway-api first if it's running, to free the port:
+gateway-api runs with Node; auth-service and Postgres run via `make up` (user-service also needs to be running for `/api/users/*` routes to reach their upstream — it has no host port mapping and no native flow, so it must stay in Docker). `USER_SERVICE_URL` in `.env.example` is a placeholder that only lets gateway-api boot (Zod requires it) — it doesn't actually resolve, so `/api/users/*` will fail with a connection error in this mode; test those routes via `make up` instead.
+Stop the Docker gateway-api first if it's running, to free the port:
 
 ```bash
 docker compose -p mypong stop gateway-api
@@ -93,6 +94,4 @@ cd services/gateway-api
 ./scripts/smoke-test.sh http://localhost:4010 # PORT=4010 (macOS with nxd)
 ```
 
-4 cases: health check and three JWT deny cases (`/api/users/me` without auth,
-with malformed token, without Bearer prefix). Auth flow is covered by the
-auth-service smoke test.
+4 cases: health check and three JWT deny cases (`/api/users/me` without auth, with malformed token, without Bearer prefix). Auth flow is covered by the auth-service smoke test.

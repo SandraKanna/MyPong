@@ -1,7 +1,6 @@
 # auth-service
 
-Handles registration, login, token refresh, and logout. Issues short-lived JWT
-access tokens (15 min) and rotating refresh tokens (7 days) stored in Postgres.
+Handles registration, login, token refresh, and logout. Issues short-lived JWT access tokens (15 min) and rotating refresh tokens (7 days) stored in Postgres.
 
 ## Endpoints
 
@@ -12,16 +11,14 @@ access tokens (15 min) and rotating refresh tokens (7 days) stored in Postgres.
 | `POST`   | `/refresh`  | Returns new access token in body, rotates refresh cookie        |
 | `DELETE` | `/session`  | Revokes refresh token (logout)                  |
 
-These paths are without the `/api/auth` prefix — that prefix is added by
-gateway-api when proxying. Direct calls to auth-service use the bare paths.
+These paths are without the `/api/auth` prefix — that prefix is added by gateway-api when proxying. Direct calls to auth-service use the bare paths.
 
 
 ## Testing
 
 ### Unit tests
 
-Independent of the Docker/native choice below — these mock the database and
-don't need any service running.
+Independent of the Docker/native choice below — these mock the database and don't need any service running.
 
 ```bash
 cd services/auth-service
@@ -31,14 +28,12 @@ npm test
 
 ### Docker (full Compose stack)
 
-Runs auth-service as a container alongside Postgres. Both use the Docker
-internal network — do not run this and the native flow at the same time (both
-bind port 4001).
+Runs auth-service as a container alongside Postgres. Both use the Docker internal network — do not run this and the native flow at the same time (both bind port 4001).
 
 Assumes the root `.env` is already set up (see the [root README](../../README.md#prerequisites)).
 
 ```bash
-make up   # starts postgres + auth-service
+make up   # starts the full stack (all 8 services)
 ```
 
 The database starts empty — run migrations once:
@@ -47,14 +42,13 @@ The database starts empty — run migrations once:
 docker compose -p mypong exec auth-service npx node-pg-migrate up --migrations-table pgmigrations_auth
 ```
 
-auth-service is available at `http://localhost:4001` once healthy.
-Stop with `make down` before switching to the native flow.
+auth-service is normally reached only through gateway-api (`/api/auth/*`), which reaches it over the Docker internal network — no other service or the browser should call `:4001` directly in the deployed setup. The host port mapping exists for one specific dev-time case: when gateway-api runs natively (outside Docker) while auth-service stays in Docker (see [gateway-api's native flow](../gateway-api/README.md#local-native)), native gateway-api can't reach `auth-service` by its Docker-internal hostname, so it needs `localhost:4001` instead. It's also used directly by this service's own smoke test below.
+
+auth-service is available at `http://localhost:4001` once healthy. Stop with `make down` before switching to the native flow.
 
 ### Local (native, faster iteration)
 
-auth-service runs directly with Node. Only Postgres runs in Docker, in a
-standalone container on port 5433 (separate from the Compose one — both can
-coexist).
+auth-service runs directly with Node. Only Postgres runs in Docker, in a standalone container on port 5433 (separate from the Compose one — both can coexist).
 
 This flow uses its own `.env` file, separate from the root one used by Docker:
 
@@ -85,11 +79,15 @@ npm run dev                        # http://localhost:4001
 
 ### Smoke test
 
-Runs against gateway-api (default: `:4010`) — the cookie has `Path=/api/auth`,
-which only matches the gateway's `/api/auth/*` routes, not auth-service's bare
-paths. Requires both auth-service and gateway-api running.
+Runs against gateway-api (default: `:4010`) — the cookie has `Path=/api/auth`, which only matches the gateway's `/api/auth/*` routes, not auth-service's bare paths. Requires both auth-service and gateway-api running.
 
 ```bash
 cd services/auth-service
 ./scripts/smoke-test.sh http://localhost:4010   # 10 cases: register, login, refresh, logout + deny cases
 ```
+
+## Gotchas
+
+**Refresh cookie dropped by the browser over plain HTTP.** `NODE_ENV=production` is hardcoded in auth-service's Dockerfile so the refresh token cookie always carries the `Secure` flag. Browsers silently discard `Secure` cookies over `http://`, so the full stack via `make up` will appear to work (the cookie is set) but `/api/auth/refresh` will fail because the browser never sends it back. Workaround for local dev: temporarily set `NODE_ENV: development` in docker-compose.yml (don't commit).
+
+**Direct calls to `:4001` bypass the cookie path.** The refresh cookie is scoped to `Path=/api/auth`, which only matches gateway-api's routes — not auth-service's bare paths. When testing auth-service directly (not through gateway-api), pass the cookie explicitly: `curl -b "refreshToken=<value>" ...`.

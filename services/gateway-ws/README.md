@@ -1,8 +1,8 @@
 # gateway-ws
 
-WebSocket hub: authenticates browser connections via JWT and will route messages to backend services (game-service, matchmaking-service, etc.) as they are implemented in later phases. No database, no REST endpoints — stateless except for open socket handles. The only HTTP endpoint is `/health` for the Docker healthcheck.
+WebSocket hub: authenticates browser connections via JWT, authenticates internal service connections via shared secret, and routes messages between them. No database, no REST endpoints — stateless except for open socket handles. The only HTTP endpoint is `/health` for the Docker healthcheck.
 
-## Connection contract
+## Browser connection
 
 Browsers connect to `wss://<host>/ws` through nginx, which terminates TLS and proxies the upgrade to gateway-ws. **Do not connect to port 4500 directly in production** — the port mapping in `docker-compose.yml` is a temporary development convenience (marked TODO for removal).
 
@@ -10,7 +10,7 @@ Browsers connect to `wss://<host>/ws` through nginx, which terminates TLS and pr
 |------|-----------|---------|
 | 1 | Client → Server | TCP + WebSocket upgrade (no auth yet) |
 | 2 | Client → Server | `{ "type": "auth", "payload": { "token": "<access_token>" } }` — must be sent within **5 seconds** of connecting |
-| 3 | Server → Client | `{ "type": "connected", "payload": { "userId": "<id>" } }` — connection is now authenticated |
+| 3 | Server → Client | `{ "type": "connected", "payload": { "userId": <id> } }` — connection is now authenticated |
 
 If authentication fails, the server closes the socket with one of these codes (application-reserved range per RFC 6455):
 
@@ -20,6 +20,40 @@ If authentication fails, the server closes the socket with one of these codes (a
 | `4003` | Bad Request — first message is not valid JSON, or does not have the required `{ type, payload.token }` shape |
 
 The `type` claim in the token is verified in addition to the signature — a refresh token is rejected even if the secret matches, as a defense against misconfiguration.
+
+## Internal service connection
+
+Backend services (game-service, match-service, user-service) connect to gateway-ws at startup using a shared secret, not a JWT. The same auth-by-first-message protocol applies: the registration message must arrive within 5 seconds of the TCP upgrade, or the socket is closed with code 4001.
+
+| Step | Direction | Message |
+|------|-----------|---------|
+| 1 | Service → gateway-ws | TCP + WebSocket upgrade |
+| 2 | Service → gateway-ws | `{ "type": "service:register", "service": "<name>", "token": "<INTERNAL_SERVICE_SECRET>" }` |
+| 3 | gateway-ws → Service | `{ "type": "registered" }` — connection is now authenticated |
+
+`service` must be one of the known names: `game-service`, `match-service`, `user-service`, `test-service` (reserved for smoke tests — see Gotchas). Any other name is rejected with code 4001.
+
+gateway-ws maintains one socket per service name. A second registration under the same name overwrites the Map entry with the new socket — it does NOT close the original one. The real service's socket stays open and connected, but is silently orphaned from routing (gateway-ws no longer sends it anything). If the impostor's connection later closes, its cleanup handler deletes the service-name entry entirely (since the Map still pointed at it), leaving the real service completely unrouted with no error and no automatic recovery — it never reconnects on its own, because from its own perspective its connection never dropped.
+
+When a browser client connects or disconnects, gateway-ws emits `player:connect` / `player:disconnect` to all registered services, carrying the `userId` of the affected browser.
+
+## Routing
+
+gateway-ws routes messages between browsers and services with no business logic — it never modifies payloads.
+
+**Service → browser fan-out** (`to` field): a service message with a `to: number[]` field is delivered to each userId in the array. The `to` field is stripped before delivery. This is how services push game events to specific browser clients.
+
+**Service → service (type-prefix routing)**: a service message without a `to` field is routed by the prefix before the first `:` in the `type` field — e.g. `match:result` routes to `match-service`, `game:assign` routes to `game-service`. No rewriting of `type` or payload.
+
+**Browser → service (userId injection)**: gateway-ws injects the authenticated `userId` into every message received from a browser before forwarding it to the target service (derived from the validated JWT, never from the payload). A client-supplied `userId` in the message body is ignored.
+
+## Environment variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PORT` | Yes | HTTP port for the `/health` endpoint |
+| `JWT_SECRET` | Yes | Must match auth-service — used to verify browser access tokens |
+| `INTERNAL_SERVICE_SECRET` | Yes | Shared secret used by internal services to authenticate |
 
 ## Testing
 
@@ -38,7 +72,7 @@ npm test
 Assumes the root `.env` is already set up (see the [root README](../../README.md#prerequisites)).
 
 ```bash
-make up   # starts postgres + auth-service + user-service + gateway-api + gateway-ws + nginx
+make up   # starts the full stack
 ```
 
 gateway-ws has no database — no migrations are needed for this service. It is ready as soon as its healthcheck passes. For the smoke test and manual verification below, you still need auth-service migrated (gateway-ws needs a real JWT, which means a real registered user):
@@ -55,7 +89,7 @@ gateway-ws is published on the host as `4500:4500` (temporary, for direct testin
 
 ```bash
 cd services/gateway-ws
-cp .env.example .env   # fill in JWT_SECRET — must match auth-service's value
+cp .env.example .env   # fill in JWT_SECRET and INTERNAL_SERVICE_SECRET — must match the root .env values
 npm install             # if not already done for unit tests
 set -a && source .env && set +a
 npm run dev              # ws://localhost:4500
@@ -65,7 +99,7 @@ npm run dev              # ws://localhost:4500
 >
 > **`set -a && source .env && set +a` only exports variables into that shell session.** If you open a new terminal to run gateway-ws again (not just to connect a client to it), repeat the `source .env` there too — otherwise Zod will reject the missing `PORT`/`JWT_SECRET` as `undefined`.
 >
-> Same shell-export risk as [auth-service](../auth-service/README.md#local-native-faster-iteration): sourcing `.env` here and then running `make up` in the same terminal can shadow the root `.env`. Open a new terminal for `make up`, or `unset PORT JWT_SECRET` first.
+> Same shell-export risk as [auth-service](../auth-service/README.md#local-native-faster-iteration): sourcing `.env` here and then running `make up` in the same terminal can shadow the root `.env`. Open a new terminal for `make up`, or `unset PORT JWT_SECRET INTERNAL_SERVICE_SECRET` first.
 
 ### Smoke test
 
@@ -122,3 +156,7 @@ wscat -c wss://localhost/ws -n   # -n skips TLS cert verification (self-signed d
 If the 5-second window passes before sending, the server closes with code 4001 — reconnect and paste faster. Also don't run `curl` while `wscat` is already connected and waiting — it'll be sent as the WS message itself, which isn't valid JSON, and the server correctly closes with 4003.
 
 > **To isolate whether a failure is nginx's proxy config or gateway-ws itself:** repeat steps 2–3 against the native process instead (`npm run dev` from the previous section), connecting directly with `wscat -c ws://localhost:4500` (plain `ws://`, no `/ws` path, no TLS — nginx isn't in the path at all). Same token, same expected response. If this works but the nginx version doesn't, the bug is in `nginx.conf`'s `/ws` block, not in gateway-ws.
+
+## Gotchas
+
+**Smoke test must register as `test-service`, never as a real service name.** A second registration under the same name silently orphans the real service from routing (see "Internal service connection" above) — there's no error, no automatic recovery, and no reconnection, since the real service's own connection never actually drops. `test-service` is a reserved slot in KNOWN_SERVICES for this exact purpose.
