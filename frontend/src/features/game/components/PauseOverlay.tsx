@@ -29,18 +29,13 @@ export default function PauseOverlay() {
   }, [graceEndsAt]);
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0,
-      background: 'rgba(0,0,0,0.75)', zIndex: 100,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      <div style={{
-        background: '#1a1a1a', color: '#fff',
-        padding: '2rem 3rem', borderRadius: '12px', textAlign: 'center',
-      }}>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>Paused</h2>
-        <p>Player {disconnectedUserId} disconnected</p>
-        <p>Waiting for reconnect… {Math.max(remaining, 0)}s</p>
+    <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center">
+      <div className="bg-surface-raised border border-border px-12 py-8 text-center flex flex-col gap-4">
+        <h2 className="font-display text-fg text-xl uppercase tracking-widest">Paused</h2>
+        <p className="font-sans text-muted">Player {disconnectedUserId} disconnected</p>
+        <p className="font-sans text-muted">
+          Waiting for reconnect… <span className="font-display text-primary">{Math.max(remaining, 0)}s</span>
+        </p>
       </div>
     </div>
   );

@@ -105,11 +105,11 @@ export default function ProfilePage() {
   }
 
   if (pageState.phase === 'loading') {
-    return <p className="text-muted">Loading…</p>;
+    return <p className="font-sans text-muted">Loading…</p>;
   }
 
   if (pageState.phase === 'error') {
-    return <p className="text-muted">{pageState.message}</p>;
+    return <p className="font-sans text-danger">{pageState.message}</p>;
   }
 
   // STUDY: After the two early returns above, TypeScript knows pageState.phase
@@ -118,24 +118,24 @@ export default function ProfilePage() {
   const isNew = pageState.phase === 'not-found';
 
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-fg text-xl font-semibold">
+    <div className="flex flex-col gap-6">
+      <h1 className="font-display text-fg text-lg uppercase tracking-widest">
         {isNew ? 'Set up your profile' : 'Your profile'}
       </h1>
       {isNew && (
-        <p className="text-muted">You haven&apos;t set a username yet.</p>
+        <p className="font-sans text-muted">You haven&apos;t set a username yet.</p>
       )}
       {/* STUDY: Avatar UI is gated on !isNew because avatar upload requires a
           profile row to already exist (the backend enforces this via 422). Showing
           an upload button before the user has set a username would lead to a
           guaranteed rejection — better to not offer the option at all. */}
       {!isNew && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
           {pageState.avatarUrl !== null && (
             <img
               src={`${pageState.avatarUrl}?v=${avatarVersion.toString()}`}
               alt="Avatar"
-              className="w-24 h-24 rounded-full object-cover"
+              className="w-24 h-24 rounded-full object-cover border border-border"
             />
           )}
           {/* STUDY: Hidden <input type="file"> + ref is the standard pattern for
@@ -161,7 +161,7 @@ export default function ProfilePage() {
           <button
             onClick={() => { fileInputRef.current?.click(); }}
             disabled={uploading}
-            className="bg-surface text-fg px-4 py-2 rounded disabled:opacity-50 self-start"
+            className="font-sans text-sm border border-border text-fg px-4 py-2 hover:border-primary hover:text-primary transition-colors disabled:opacity-50 self-start"
           >
             {uploading
               ? 'Uploading…'
@@ -169,11 +169,13 @@ export default function ProfilePage() {
                 ? 'Change avatar'
                 : 'Upload avatar'}
           </button>
-          {uploadError !== null && <p className="text-muted">{uploadError}</p>}
+          {uploadError !== null && (
+            <p className="font-sans text-danger text-sm">{uploadError}</p>
+          )}
         </div>
       )}
       <div className="flex flex-col gap-2">
-        <label htmlFor="username" className="text-fg text-sm">
+        <label htmlFor="username" className="font-sans text-muted text-sm">
           Username
         </label>
         <input
@@ -182,18 +184,18 @@ export default function ProfilePage() {
           aria-label="Username"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          className="bg-surface text-fg px-3 py-2 rounded"
+          className="bg-surface-raised border border-border text-fg px-3 py-2 font-sans focus:outline-none focus:ring-2 focus:ring-primary max-w-sm"
         />
       </div>
       {saveError !== null && (
-        <p className="text-muted">{saveError}</p>
+        <p className="font-sans text-danger text-sm">{saveError}</p>
       )}
       {/* STUDY: Two independent disabled conditions — saving prevents double-submit;
           empty draft prevents sending a blank username to the server. */}
       <button
         onClick={() => void handleSave()}
         disabled={saving || draft.trim() === ''}
-        className="bg-surface text-fg px-4 py-2 rounded disabled:opacity-50"
+        className="bg-primary text-primary-fg font-display text-sm uppercase tracking-wide py-2 px-6 hover:bg-primary-hover disabled:opacity-50 transition-colors self-start"
       >
         {saving ? 'Saving…' : 'Save'}
       </button>

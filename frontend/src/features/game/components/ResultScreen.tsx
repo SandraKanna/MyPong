@@ -17,10 +17,17 @@ export default function ResultScreen() {
   const heading = HEADINGS[reason][didWin ? 'win' : 'lose'];
 
   return (
-    <div>
-      <h2>{heading}</h2>
-      <p>{score.left} – {score.right}</p>
-      <button onClick={() => useGameStore.getState().reset()}>Play again</button>
+    <div className="flex flex-col items-center gap-8 py-16">
+      <h2 className={`font-display text-4xl uppercase tracking-widest ${didWin ? 'text-success' : 'text-muted'}`}>
+        {heading}
+      </h2>
+      <p className="font-display text-2xl text-fg">{score.left} – {score.right}</p>
+      <button
+        onClick={() => useGameStore.getState().reset()}
+        className="bg-primary text-primary-fg font-display text-sm uppercase tracking-wide py-2 px-6 hover:bg-primary-hover transition-colors"
+      >
+        Play Again
+      </button>
     </div>
   );
 }

@@ -12,19 +12,19 @@ beforeEach(() => {
 describe('LobbyView — idle phase', () => {
   it('renders the Find Match button', () => {
     render(<LobbyView phase="idle" rejectedMessage={null} onFindMatch={noop} onCancel={noop} />);
-    expect(screen.getByRole('button', { name: 'Find Match button' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Find Match' })).toBeDefined();
   });
 
   it('does not render the Cancel button in idle', () => {
     render(<LobbyView phase="idle" rejectedMessage={null} onFindMatch={noop} onCancel={noop} />);
-    expect(screen.queryByRole('button', { name: 'Cancel button' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
   });
 
   it('calls onFindMatch when Find Match is clicked', async () => {
     const onFindMatch = vi.fn();
     const user = userEvent.setup();
     render(<LobbyView phase="idle" rejectedMessage={null} onFindMatch={onFindMatch} onCancel={noop} />);
-    await user.click(screen.getByRole('button', { name: 'Find Match button' }));
+    await user.click(screen.getByRole('button', { name: 'Find Match' }));
     expect(onFindMatch).toHaveBeenCalledOnce();
   });
 
@@ -43,19 +43,19 @@ describe('LobbyView — idle phase', () => {
 describe('LobbyView — queued phase', () => {
   it('renders the Cancel button', () => {
     render(<LobbyView phase="queued" rejectedMessage={null} onFindMatch={noop} onCancel={noop} />);
-    expect(screen.getByRole('button', { name: 'Cancel button' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDefined();
   });
 
   it('does not render the Find Match button in queued', () => {
     render(<LobbyView phase="queued" rejectedMessage={null} onFindMatch={noop} onCancel={noop} />);
-    expect(screen.queryByRole('button', { name: 'Find Match button' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Find Match' })).toBeNull();
   });
 
   it('calls onCancel when Cancel is clicked', async () => {
     const onCancel = vi.fn();
     const user = userEvent.setup();
     render(<LobbyView phase="queued" rejectedMessage={null} onFindMatch={noop} onCancel={onCancel} />);
-    await user.click(screen.getByRole('button', { name: 'Cancel button' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onCancel).toHaveBeenCalledOnce();
   });
 
