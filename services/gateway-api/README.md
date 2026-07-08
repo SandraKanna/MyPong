@@ -56,7 +56,8 @@ gateway-api is available at `http://localhost:4010` once started.
 
 ### Local (native)
 
-gateway-api runs with Node; auth-service and Postgres run via `make up` (user-service also needs to be running for `/api/users/*` routes to reach their upstream — it has no host port mapping and no native flow, so it must stay in Docker). Stop the Docker gateway-api first if it's running, to free the port:
+gateway-api runs with Node; auth-service and Postgres run via `make up` (user-service also needs to be running for `/api/users/*` routes to reach their upstream — it has no host port mapping and no native flow, so it must stay in Docker). `USER_SERVICE_URL` in `.env.example` is a placeholder that only lets gateway-api boot (Zod requires it) — it doesn't actually resolve, so `/api/users/*` will fail with a connection error in this mode; test those routes via `make up` instead.
+Stop the Docker gateway-api first if it's running, to free the port:
 
 ```bash
 docker compose -p mypong stop gateway-api
