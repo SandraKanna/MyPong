@@ -27,13 +27,6 @@ export default function GamePage() {
   // the array entirely would re-run the effect on every render, re-subscribing
   // to every WS message type on each state change.
   useEffect(() => {
-    // If returning to /game after leaving mid-queue or after a completed
-    // match, clear the stale phase so the lobby shows fresh instead of a
-    // leftover "Looking for an opponent…" or result screen.
-    const staleOnMount = useGameStore.getState().phase;
-    if (staleOnMount === 'queued' || staleOnMount === 'ended' || staleOnMount === 'matched') {
-      useGameStore.getState().reset();
-    }
     connectWs();
 
     const { setConnected, handleMatchMatched, handleMatchRejected, handleGameState,
@@ -60,6 +53,13 @@ export default function GamePage() {
 
     return () => {
       unsubs.forEach((unsub) => unsub());
+      const phase = useGameStore.getState().phase;
+      if (phase === 'queued') {
+        sendWs({ type: 'match:cancel' });
+      } else if (phase === 'matched' || phase === 'playing' || phase === 'paused') {
+        sendWs({ type: 'game:leave' });
+      }
+      useGameStore.getState().reset();
       disconnectWs();
     };
   }, []);

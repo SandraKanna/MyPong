@@ -14,7 +14,7 @@ vi.mock('../src/shared/ws/wsClient', () => ({
 }));
 
 // Import after vi.mock so the module sees the mocked version.
-import { connectWs, disconnectWs, onWsMessage } from '../src/shared/ws/wsClient';
+import { connectWs, disconnectWs, onWsMessage, sendWs } from '../src/shared/ws/wsClient';
 import GamePage from '../src/features/game/pages/GamePage';
 
 beforeEach(() => {
@@ -25,73 +25,100 @@ beforeEach(() => {
   vi.mocked(onWsMessage).mockReturnValue(vi.fn());
 });
 
-describe('GamePage — mount-time stale phase guard (queued/matched/ended)', () => {
-  it('calls reset() before connectWs() when phase is already ended', () => {
-    // Drive the store to 'ended' to simulate a leftover result from a previous match.
+describe('GamePage — unmount sends phase-aware WS message', () => {
+  it('sends match:cancel on unmount when phase is queued', () => {
+    useGameStore.setState({ phase: 'queued', myUserId: 42 });
+
+    const { unmount } = render(<GamePage />);
+    unmount();
+
+    expect(vi.mocked(sendWs)).toHaveBeenCalledWith({ type: 'match:cancel' });
+    expect(vi.mocked(sendWs)).not.toHaveBeenCalledWith({ type: 'game:leave' });
+  });
+
+  it('sends game:leave on unmount when phase is matched', () => {
     useGameStore.setState({
-      phase: 'ended',
-      myUserId: 42,
-      winnerId: 42,
-      reason: 'completed',
-      score: { left: 11, right: 3 },
+      phase: 'matched', myUserId: 42, matchId: 1,
+      players: { '42': 'left', '17': 'right' },
+      startsAt: new Date(Date.now() + 3000).toISOString(),
+    });
+
+    const { unmount } = render(<GamePage />);
+    unmount();
+
+    expect(vi.mocked(sendWs)).toHaveBeenCalledWith({ type: 'game:leave' });
+  });
+
+  it('sends game:leave on unmount when phase is playing', () => {
+    useGameStore.setState({
+      phase: 'playing', myUserId: 42, matchId: 1,
+      players: { '42': 'left', '17': 'right' }, mySide: 'left', snapshot: null,
+    });
+
+    const { unmount } = render(<GamePage />);
+    unmount();
+
+    expect(vi.mocked(sendWs)).toHaveBeenCalledWith({ type: 'game:leave' });
+  });
+
+  it('sends game:leave on unmount when phase is paused', () => {
+    useGameStore.setState({
+      phase: 'paused', myUserId: 42, matchId: 1,
+      players: { '42': 'left', '17': 'right' }, mySide: 'left', snapshot: null,
+      disconnectedUserId: 17, graceEndsAt: new Date(Date.now() + 5000).toISOString(),
+    });
+
+    const { unmount } = render(<GamePage />);
+    unmount();
+
+    expect(vi.mocked(sendWs)).toHaveBeenCalledWith({ type: 'game:leave' });
+  });
+
+  it('sends no WS message on unmount when phase is idle', () => {
+    const { unmount } = render(<GamePage />);
+    unmount();
+
+    expect(vi.mocked(sendWs)).not.toHaveBeenCalled();
+  });
+
+  it('sends no WS message on unmount when phase is ended', () => {
+    useGameStore.setState({
+      phase: 'ended', myUserId: 42, winnerId: 42,
+      reason: 'completed', score: { left: 11, right: 3 },
       players: { '42': 'left', '17': 'right' },
     });
 
-    const callOrder: string[] = [];
-    // Spy on reset() to record when it's called relative to connectWs().
-    const resetSpy = vi.spyOn(useGameStore.getState(), 'reset').mockImplementation(() => {
-      callOrder.push('reset');
-      useGameStore.setState({ phase: 'idle', myUserId: 42 });
-    });
-    vi.mocked(connectWs).mockImplementation(() => { callOrder.push('connectWs'); });
-
     const { unmount } = render(<GamePage />);
     unmount();
 
-    expect(callOrder).toEqual(['reset', 'connectWs']);
-    resetSpy.mockRestore();
+    expect(vi.mocked(sendWs)).not.toHaveBeenCalled();
   });
 
-  it('does not call reset() when phase is idle on mount', () => {
-    const resetSpy = vi.spyOn(useGameStore.getState(), 'reset');
-
-    const { unmount } = render(<GamePage />);
-    unmount();
-
-    expect(resetSpy).not.toHaveBeenCalled();
-    resetSpy.mockRestore();
-  });
-
-  it('calls reset() when phase is queued on mount (stale queue entry cleared)', () => {
+  it('calls sendWs before disconnectWs on unmount', () => {
     useGameStore.setState({ phase: 'queued', myUserId: 42 });
-    const resetSpy = vi.spyOn(useGameStore.getState(), 'reset');
+
+    const callOrder: string[] = [];
+    vi.mocked(sendWs).mockImplementation(() => { callOrder.push('sendWs'); });
+    vi.mocked(disconnectWs).mockImplementation(() => { callOrder.push('disconnectWs'); });
 
     const { unmount } = render(<GamePage />);
     unmount();
 
-    expect(resetSpy).toHaveBeenCalledOnce();
-    resetSpy.mockRestore();
-  });
-
-  it('calls reset() when phase is matched on mount (frozen countdown cleared)', () => {
-    useGameStore.setState({
-      phase:    'matched',
-      myUserId: 42,
-      matchId:  1,
-      players:  { '42': 'left', '17': 'right' },
-      startsAt: new Date(Date.now() - 5000).toISOString(), // countdown already expired
-    });
-    const resetSpy = vi.spyOn(useGameStore.getState(), 'reset');
-
-    const { unmount } = render(<GamePage />);
-    unmount();
-
-    expect(resetSpy).toHaveBeenCalledOnce();
-    resetSpy.mockRestore();
+    expect(callOrder).toEqual(['sendWs', 'disconnectWs']);
   });
 });
 
 describe('GamePage — unmount cleanup', () => {
+  it('calls reset() on every unmount regardless of phase', () => {
+    const resetSpy = vi.spyOn(useGameStore.getState(), 'reset');
+
+    const { unmount } = render(<GamePage />);
+    unmount();
+
+    expect(resetSpy).toHaveBeenCalledOnce();
+    resetSpy.mockRestore();
+  });
+
   it('calls disconnectWs() exactly once on unmount', () => {
     const { unmount } = render(<GamePage />);
     expect(vi.mocked(disconnectWs)).not.toHaveBeenCalled();
