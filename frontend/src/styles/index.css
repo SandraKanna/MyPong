@@ -1,9 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 @import "tailwindcss";
 
-/* PLACEHOLDER palette — neutral grayscale until a dedicated design pass. */
 @theme {
-  --color-bg: #18181b;
-  --color-surface: #27272a;
-  --color-fg: #fafafa;
-  --color-muted: #a1a1aa;
+  --color-bg:             #0d0221;
+  --color-surface:        #1a0b2e;
+  --color-surface-raised: #2d1b4e;
+  --color-border:         #4a2a6b;
+  --color-fg:             #f4eeff;
+  --color-muted:          #9d8bc4;
+  --color-primary:        #05d9e8;
+  --color-primary-hover:  #03aab8;
+  --color-primary-fg:     #001417;
+  --color-accent:         #ff2adf;
+  --color-danger:         #ff3864;
+  --color-success:        #00ff9f;
+
+  --font-display: 'Press Start 2P', monospace;
+  --font-sans:    system-ui, sans-serif;
 }
