@@ -9,15 +9,17 @@ A real-time multiplayer Pong game: 1v1 online, matchmaking, tournaments, and AI 
 ## What is implemented today
 
 - **auth-service** — register, login, refresh (with rotation), logout (with revocation)
-- **user-service** — profile (display name), avatar upload
+- **user-service** — profile (display name), avatar upload, match stats and history
 - **gateway-api** — REST proxy with JWT validation for protected routes
-- **gateway-ws** — websocket hub with auth via first message
+- **gateway-ws** — WebSocket hub: browser auth, message routing by type prefix, user-targeted delivery
+- **game-service** — real-time physics (ball, paddles, score), session lifecycle, pause/reconnect grace window
+- **match-service** — FIFO matchmaking queue, match creation and closure, history event emission
 - **Public Edge (nginx)** — TLS termination, reverse proxy, static frontend serving
-- **frontend** — login/register, protected routing, profile page with avatar upload
+- **frontend** — login/register, protected routing, profile + avatar, 1v1 game (lobby, countdown, live board, pause overlay, result screen)
 
 See each service's README for endpoint-level detail and setup.
 
-Everything else (WebSocket hub, game engine, match service, tournaments, AI) is under construction.
+Tournaments and AI opponent are under construction.
 
 ---
 
@@ -49,6 +51,8 @@ Each service has its own README with the full setup (Docker + native) and smoke 
 - [`services/gateway-api/README.md`](services/gateway-api/README.md)
 - [`services/gateway-ws/README.md`](services/gateway-ws/README.md)
 - [`services/user-service/README.md`](services/user-service/README.md)
+- [`services/game-service/README.md`](services/game-service/README.md)
+- `services/match-service/` — README pending
 
 ---
 
@@ -67,9 +71,9 @@ The frontend (including Public Edge/nginx) runs as a separate job: **lint → ty
 
 | Phase 0 | Repo structure, tsconfig, Docker Compose skeleton, Makefile, CI (Done)
 | Phase 1 | auth-service + gateway-api + frontend login/register + Public Edge (Done)
-| Phase 2 | user-service + frontend architecture skeleton + profile + avatar upload (done)
-| Phase 3 | gateway-ws + game-service + match-service (WIP)
-| Phase 4 | frontend lobby + gameboard (Pending)
+| Phase 2 | user-service + frontend profile + avatar upload (Done)
+| Phase 3 | gateway-ws hub + game-service (physics, session lifecycle, pause/reconnect) + match-service (matchmaking, match lifecycle, stats/history recording) (Done)
+| Phase 4 | Full game frontend: lobby, 3s countdown, live board, pause overlay, result screen (Done)
 | Phase 5 | ia-bot-service + guest mode (Pending)
 | Phase 6 | tournament-service + frontend brackets (Pending)
 | Phase 7 | Unit test coverage review across all services (Pending)

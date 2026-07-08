@@ -1,7 +1,8 @@
 name: mypong
 
-# Dockerfiles for all custom services are pending (added per phase).
-# Running "make up" will fail until at least Fase 1 Dockerfiles exist.
+# tournament-service and ia-bot-service below have no Dockerfile yet
+# (Fases 5-6) — they're scaffolding for future phases and are intentionally excluded 
+# from the Makefile's SERVICES list, so `make up` never tries to build them.
 
 services:
 
@@ -93,9 +94,8 @@ services:
       dockerfile: services/auth-service/Dockerfile
     expose:
       - "4001" # reachable by other containers on backend-net (e.g. gateway-api)
-    # TODO: remove this ports mapping once gateway-api is in make up and acts
-    # as the sole entry point for /api/auth/*. Direct access to :4001 is only
-    # needed while gateway-api runs natively (not yet in the compose stack).
+    # TODO: remove this ports mapping once gateway-api's native dev flow is
+    # retired (or rerouted through nginx). Nothing else should call this port directly.
     ports:
       - "4001:4001"
     environment:
