@@ -25,7 +25,7 @@ export default function LoginPage() {
       // STUDY: replace:true so the browser's back button won't return the user to
       // /login after a successful authentication. The login page is a dead-end
       // once the user is in — they should press Logout to leave.
-      void navigate('/', { replace: true });
+      void navigate('/profile', { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     } finally {

@@ -23,6 +23,7 @@ export default function App() {
             wrap child routes without having a path themselves. React Router
             renders the matching child into their <Outlet />. */}
         <Route element={<PublicLayout />}>
+          <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
         </Route>
@@ -32,7 +33,6 @@ export default function App() {
             means new routes go inside this block unless explicitly public. */}
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
-            <Route path="/" element={<HomePage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/game" element={<GamePage />} />
           </Route>

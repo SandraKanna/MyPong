@@ -16,7 +16,7 @@ function renderLoginPage() {
     <MemoryRouter initialEntries={['/login']}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/" element={<div>Home</div>} />
+        <Route path="/profile" element={<div>Profile</div>} />
         <Route path="/register" element={<div>Register page</div>} />
       </Routes>
     </MemoryRouter>,
@@ -41,7 +41,7 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('button', { name: /log in/i }));
 
     expect(vi.mocked(login)).toHaveBeenCalledWith('test@example.com', 'password123');
-    await screen.findByText('Home');
+    await screen.findByText('Profile');
   });
 
   it('displays the error message when login fails', async () => {
