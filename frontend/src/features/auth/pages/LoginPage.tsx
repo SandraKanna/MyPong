@@ -27,7 +27,7 @@ export default function LoginPage() {
       // once the user is in — they should press Logout to leave.
       void navigate('/', { replace: true });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error inesperado');
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     } finally {
       // STUDY: finally runs whether the try block succeeded or threw. Without it,
       // a thrown error would leave `submitting` stuck at true and the button
@@ -37,43 +37,53 @@ export default function LoginPage() {
   }
 
   return (
-    <div>
-      <h2>Iniciar sesión</h2>
-      <div>
-        {/* accessible name for screen readers; also enables role/label-based test queries */}
-        {/* TODO: replace with a visible associated <label> during the CSS redesign */}
+    <div className="bg-surface border border-border p-8 w-full max-w-sm flex flex-col gap-6">
+      <h2 className="font-display text-fg text-lg uppercase tracking-widest text-center">
+        Log In
+      </h2>
+      <div className="flex flex-col gap-2">
+        <label htmlFor="email" className="font-sans text-muted text-sm">
+          Email
+        </label>
         {/* STUDY: value + onChange is the "controlled input" pattern. React owns the
             value; every keystroke fires onChange → setState → re-render → input shows
             the new value. The alternative (uncontrolled, with a ref) is harder to
             validate and reset programmatically. */}
         <input
+          id="email"
           type="email"
-          aria-label="Email"
-          placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          className="bg-surface-raised border border-border text-fg px-3 py-2 font-sans focus:outline-none focus:ring-2 focus:ring-primary"
         />
       </div>
-      <div>
-        {/* accessible name for screen readers; also enables role/label-based test queries */}
-        {/* TODO: replace with a visible associated <label> during the CSS redesign */}
+      <div className="flex flex-col gap-2">
+        <label htmlFor="password" className="font-sans text-muted text-sm">
+          Password
+        </label>
         <input
+          id="password"
           type="password"
-          aria-label="Contraseña"
-          placeholder="Contraseña"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          className="bg-surface-raised border border-border text-fg px-3 py-2 font-sans focus:outline-none focus:ring-2 focus:ring-primary"
         />
       </div>
-      {error !== null && <p style={{ color: 'red' }}>{error}</p>}
-      <div>
-        <button onClick={() => void handleSubmit()} disabled={submitting}>
-          Entrar
-        </button>
-      </div>
-      <div>
-        <Link to="/register">¿No tenés cuenta? Registrate</Link>
-      </div>
+      {error !== null && (
+        <p className="font-sans text-danger text-sm">{error}</p>
+      )}
+      <button
+        onClick={() => void handleSubmit()}
+        disabled={submitting}
+        className="bg-primary text-primary-fg font-display text-sm uppercase tracking-wide py-2 hover:bg-primary-hover disabled:opacity-50 transition-colors"
+      >
+        Log In
+      </button>
+      <p className="font-sans text-sm text-center">
+        <Link to="/register" className="text-accent hover:underline">
+          No account? Register
+        </Link>
+      </p>
     </div>
   );
 }

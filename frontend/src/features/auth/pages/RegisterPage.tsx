@@ -18,46 +18,56 @@ export default function RegisterPage() {
       // is reasonable (maybe the user wants to fix a typo in their email).
       void navigate('/login');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error inesperado');
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div>
-      <h2>Crear cuenta</h2>
-      <div>
-        {/* accessible name for screen readers; also enables role/label-based test queries */}
-        {/* TODO: replace with a visible associated <label> during the CSS redesign */}
+    <div className="bg-surface border border-border p-8 w-full max-w-sm flex flex-col gap-6">
+      <h2 className="font-display text-fg text-lg uppercase tracking-widest text-center">
+        Create Account
+      </h2>
+      <div className="flex flex-col gap-2">
+        <label htmlFor="email" className="font-sans text-muted text-sm">
+          Email
+        </label>
         <input
+          id="email"
           type="email"
-          aria-label="Email"
-          placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          className="bg-surface-raised border border-border text-fg px-3 py-2 font-sans focus:outline-none focus:ring-2 focus:ring-primary"
         />
       </div>
-      <div>
-        {/* accessible name for screen readers; also enables role/label-based test queries */}
-        {/* TODO: replace with a visible associated <label> during the CSS redesign */}
+      <div className="flex flex-col gap-2">
+        <label htmlFor="password" className="font-sans text-muted text-sm">
+          Password
+        </label>
         <input
+          id="password"
           type="password"
-          aria-label="Contraseña"
-          placeholder="Contraseña"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          className="bg-surface-raised border border-border text-fg px-3 py-2 font-sans focus:outline-none focus:ring-2 focus:ring-primary"
         />
       </div>
-      {error !== null && <p style={{ color: 'red' }}>{error}</p>}
-      <div>
-        <button onClick={() => void handleSubmit()} disabled={submitting}>
-          Registrarse
-        </button>
-      </div>
-      <div>
-        <Link to="/login">¿Ya tenés cuenta? Iniciá sesión</Link>
-      </div>
+      {error !== null && (
+        <p className="font-sans text-danger text-sm">{error}</p>
+      )}
+      <button
+        onClick={() => void handleSubmit()}
+        disabled={submitting}
+        className="bg-primary text-primary-fg font-display text-sm uppercase tracking-wide py-2 hover:bg-primary-hover disabled:opacity-50 transition-colors"
+      >
+        Register
+      </button>
+      <p className="font-sans text-sm text-center">
+        <Link to="/login" className="text-accent hover:underline">
+          Have an account? Log in
+        </Link>
+      </p>
     </div>
   );
 }

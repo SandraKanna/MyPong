@@ -27,8 +27,8 @@ describe('LoginPage', () => {
   it('renders email and password fields and the submit button', () => {
     renderLoginPage();
     screen.getByRole('textbox', { name: /email/i });
-    screen.getByLabelText(/contraseña/i);
-    screen.getByRole('button', { name: /entrar/i });
+    screen.getByLabelText(/password/i);
+    screen.getByRole('button', { name: /log in/i });
   });
 
   it('calls login with form values and navigates to / on success', async () => {
@@ -37,22 +37,22 @@ describe('LoginPage', () => {
     renderLoginPage();
 
     await user.type(screen.getByRole('textbox', { name: /email/i }), 'test@example.com');
-    await user.type(screen.getByLabelText(/contraseña/i), 'password123');
-    await user.click(screen.getByRole('button', { name: /entrar/i }));
+    await user.type(screen.getByLabelText(/password/i), 'password123');
+    await user.click(screen.getByRole('button', { name: /log in/i }));
 
     expect(vi.mocked(login)).toHaveBeenCalledWith('test@example.com', 'password123');
     await screen.findByText('Home');
   });
 
   it('displays the error message when login fails', async () => {
-    vi.mocked(login).mockRejectedValue(new Error('Credenciales inválidas'));
+    vi.mocked(login).mockRejectedValue(new Error('Invalid credentials'));
     const user = userEvent.setup();
     renderLoginPage();
 
     await user.type(screen.getByRole('textbox', { name: /email/i }), 'x@x.com');
-    await user.type(screen.getByLabelText(/contraseña/i), 'wrongpass');
-    await user.click(screen.getByRole('button', { name: /entrar/i }));
+    await user.type(screen.getByLabelText(/password/i), 'wrongpass');
+    await user.click(screen.getByRole('button', { name: /log in/i }));
 
-    await screen.findByText(/credenciales inválidas/i);
+    await screen.findByText(/invalid credentials/i);
   });
 });

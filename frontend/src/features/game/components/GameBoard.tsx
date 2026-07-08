@@ -94,11 +94,14 @@ export default function GameBoard() {
       viewBox={`0 0 ${FIELD_W} ${FIELD_H}`}
       preserveAspectRatio="xMidYMid meet"
       width="100%"
-      style={{ display: 'block', background: '#000' }}
+      className="block bg-black"
     >
+      {/* Center net */}
+      <line x1={FIELD_W / 2} y1={0} x2={FIELD_W / 2} y2={FIELD_H} stroke="#ffffff" strokeOpacity={0.3} strokeWidth={4} strokeDasharray="16 20" />
+
       {/* Score — positioned above the mid-line, one per side */}
-      <text x={FIELD_W / 4}     y={50} textAnchor="middle" fill="#fff" fontSize={40}>{score.left}</text>
-      <text x={FIELD_W * 3 / 4} y={50} textAnchor="middle" fill="#fff" fontSize={40}>{score.right}</text>
+      <text x={FIELD_W / 4}     y={50} textAnchor="middle" fill="#05d9e8" fontSize={40} fontFamily="'Press Start 2P', monospace">{score.left}</text>
+      <text x={FIELD_W * 3 / 4} y={50} textAnchor="middle" fill="#05d9e8" fontSize={40} fontFamily="'Press Start 2P', monospace">{score.right}</text>
 
       {/* Ball — ball.x/y are the center coordinates from game-service */}
       <circle cx={ball.x} cy={ball.y} r={BALL_R} fill="#fff" />

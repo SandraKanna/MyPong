@@ -38,9 +38,9 @@ export default function CountdownOverlay({ startsAt }: CountdownOverlayProps) {
   }, [startsAt]);
 
   return (
-    <div>
-      <p>Match starting in</p>
-      <p>{Math.max(remaining, 0)}</p>
+    <div className="min-h-screen bg-bg flex flex-col items-center justify-center gap-6">
+      <p className="font-sans text-muted text-lg">Match starting in</p>
+      <p className="font-display text-8xl text-primary">{Math.max(remaining, 0)}</p>
     </div>
   );
 }
