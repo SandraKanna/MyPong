@@ -41,6 +41,14 @@ comment in `.env.example` explains why).
 
 `make up` then starts the implemented stack. See each service's README for endpoint-level testing.
 
+The database starts empty on a fresh stack (or after `make fclean`/`make rebuild`) — run all three migration sets once, in this order (`user-service`'s tables have a foreign key into `auth-service`'s `users` table, so it must run second, not first):
+
+```bash
+docker compose -p mypong exec auth-service npx node-pg-migrate up --migrations-table pgmigrations_auth
+docker compose -p mypong exec user-service npx node-pg-migrate up --migrations-table pgmigrations_user
+docker compose -p mypong exec match-service npx node-pg-migrate up --migrations-table pgmigrations_match
+```
+
 ---
 
 ## Running a service locally
@@ -52,7 +60,7 @@ Each service has its own README with the full setup (Docker + native) and smoke 
 - [`services/gateway-ws/README.md`](services/gateway-ws/README.md)
 - [`services/user-service/README.md`](services/user-service/README.md)
 - [`services/game-service/README.md`](services/game-service/README.md)
-- `services/match-service/` — README pending
+- [`services/match-service/README.md`](services/match-service/README.md)
 
 ---
 
