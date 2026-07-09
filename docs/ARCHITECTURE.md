@@ -21,6 +21,8 @@ Internally, it's organized by feature (auth, profile, game, ...), each owning it
 
 ## Gateways
 
+The two gateways define a hard boundary between browser-facing and internal traffic. Browser-originated requests — REST through gateway-api, WebSocket frames through gateway-ws — are north-south: they cross from the public internet into the system and are authenticated at the gateway before reaching any backend service. When backend services communicate with each other — for example, match-service publishing a result that user-service consumes — that is east-west: internal-to-internal traffic that stays on backend-net and never involves the public internet or the browser, even when it travels through gateway-ws as a routing hub.
+
 ### gateway-api
 
 Sole entry point for REST calls. Validates the JWT access token on every request and rejects unauthenticated ones with 401, except for the public auth routes. No business logic, no database access — it only knows whether a token is valid and where to forward the request. Reaches auth-service and user-service. Sits on both networks.
@@ -43,11 +45,11 @@ Owns public profile data: display name, stats, avatar. Writes to the avatars_dat
 
 ### game-service
 
-Owns the real-time physics of a match while it's in progress: ball, paddles, score, end conditions. A pure WebSocket client with no database and no persistence — match state lives in memory only, for the lifetime of the connection. How it receives match assignments from match-service, and how it reports the final result back, isn't modeled yet, but it's expected to happen through gateway-ws messages, not direct service calls.
+Owns the real-time physics of a match while it's in progress: ball, paddles, score, end conditions. A pure WebSocket client with no database and no persistence — match state lives in memory only, for the lifetime of the connection. Receives match assignments from match-service and reports the final result back through gateway-ws messages, never through a direct service-to-service call.
 
 ### match-service
 
-Owns the full lifecycle of a match outside of gameplay itself: pairing waiting players, assigning a matchId, and recording the final result once a match ends. Connects to gateway-ws as a client to receive join/cancel requests and announce a pairing. Has DATABASE_URL — both the match queue and match history need to survive a restart. How it hands a new pairing off to game-service, and how it receives the final result back, isn't modeled yet; expected to go through gateway-ws, same as above.
+Owns the full lifecycle of a match outside of gameplay itself: pairing waiting players, assigning a matchId, and recording the final result once a match ends. Connects to gateway-ws as a client to receive join/cancel requests and announce a pairing. Has DATABASE_URL — both the match queue and match history need to survive a restart. Hands off a new pairing to game-service and receives the final result back the same way, through gateway-ws messages rather than a direct call.
 
 ### tournament-service
 
