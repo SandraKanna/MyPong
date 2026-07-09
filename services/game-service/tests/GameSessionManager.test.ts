@@ -232,6 +232,19 @@ describe('GameSessionManager', () => {
     expect(newMsgs.some((m) => m.type === 'match:result' || m.type === 'game:end')).toBe(false);
   });
 
+  it('game:resumed payload includes the players map as a plain string-keyed object', () => {
+    manager = new GameSessionManager((msg) => sent.push(msg), { gracePeriodMs: 5_000 });
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
+
+    manager.handlePlayerDisconnect(42);
+    manager.handlePlayerConnect(42);
+
+    const resumedMsg = sent.find((m) => m.type === 'game:resumed');
+    expect(resumedMsg).toBeDefined();
+    const p = resumedMsg!.payload as { players: Record<string, string> };
+    expect(p.players).toEqual({ '42': 'left', '17': 'right' });
+  });
+
   it('timer expiry emits match:result and game:end with correct forfeit winner and reason', () => {
     manager = new GameSessionManager((msg) => sent.push(msg), { gracePeriodMs: 5_000 });
     manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
@@ -417,6 +430,25 @@ describe('GameSessionManager', () => {
     expect(manager.sessionCount()).toBe(1); // session was created normally
     const forfeitMsgs = sent.filter((m) => m.type === 'match:result' || m.type === 'game:end');
     expect(forfeitMsgs).toHaveLength(0);
+  });
+
+  it('pending-session reconnect re-sends match:matched to the reconnecting player only with correct payload', () => {
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    const startsAt = new Date(Date.now() + 3_000).toISOString(); // '2025-01-01T00:00:03.000Z'
+
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }, startsAt));
+    manager.handlePlayerDisconnect(42);
+    sent.length = 0; // clear game:paused so the assertion below is unambiguous
+
+    manager.handlePlayerConnect(42);
+
+    const redelivered = sent.find((m) => m.type === 'match:matched');
+    expect(redelivered).toBeDefined();
+    expect(redelivered!.to).toEqual([42]); // only to the reconnecting player, not both
+    const p = redelivered!.payload as { matchId: number; players: Record<string, string>; startsAt: string };
+    expect(p.matchId).toBe(1);
+    expect(p.players).toEqual({ '42': 'left', '17': 'right' });
+    expect(p.startsAt).toBe(startsAt); // real remaining deadline, not a dummy value
   });
 
   it('double-disconnect during countdown: second is a no-op, first disconnector stays recorded', () => {

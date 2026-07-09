@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useGameStore } from '../src/features/game/state/gameStore';
-import type { GameStatePayload } from '../src/shared/ws/wsMessages';
+import type { GameStatePayload, GameResumedPayload } from '../src/shared/ws/wsMessages';
 
 // gameStore imports disconnectWs — mock it so auth-subscription tests can
 // verify it was called without opening a real WebSocket.
@@ -24,6 +24,16 @@ function snapshot(matchId = 1): GameStatePayload {
     ball:    { x: 50, y: 50 },
     paddles: { leftY: 50, rightY: 50 },
     score:   { left: 0, right: 0 },
+  };
+}
+
+function resumedPayload(matchId = 1, players = PLAYERS): GameResumedPayload {
+  return {
+    matchId,
+    ball:    { x: 50, y: 50 },
+    paddles: { leftY: 50, rightY: 50 },
+    score:   { left: 0, right: 0 },
+    players,
   };
 }
 
@@ -116,9 +126,26 @@ describe('handleMatchMatched', () => {
     expect(state.startsAt).toBe('2025-01-01T00:00:03Z');
   });
 
-  it('is a no-op when not queued (invalid transition guard)', () => {
+  it('is a no-op in idle when myUserId is null (connected not yet received)', () => {
+    // beforeEach leaves myUserId: null — the sub-guard must block the transition even
+    // though idle is now an accepted source phase when myUserId is set.
     useGameStore.getState().handleMatchMatched(7, PLAYERS, '2025-01-01T00:00:03Z');
     expect(useGameStore.getState().phase).toBe('idle');
+  });
+
+  it('idle → matched when myUserId is set (cold-start rehydration re-delivery from game-service)', () => {
+    // Simulates: player reloads during 3-second countdown, WS reconnects,
+    // game-service re-sends match:matched to the single reconnecting player.
+    useGameStore.getState().setConnected(42); // 'connected' arrives first, sets myUserId
+    useGameStore.getState().handleMatchMatched(7, PLAYERS, '2025-01-01T00:00:03Z');
+
+    const state = useGameStore.getState();
+    expect(state.phase).toBe('matched');
+    if (state.phase !== 'matched') return;
+    expect(state.matchId).toBe(7);
+    expect(state.myUserId).toBe(42);
+    expect(state.players).toEqual(PLAYERS);
+    expect(state.startsAt).toBe('2025-01-01T00:00:03Z');
   });
 });
 
@@ -254,18 +281,64 @@ describe('handleGameResumed', () => {
 
   it('transitions paused → playing with new snapshot', () => {
     reachPaused();
-    const s = snapshot(1);
-    useGameStore.getState().handleGameResumed(s);
+    const p = resumedPayload(1);
+    useGameStore.getState().handleGameResumed(p);
     const state = useGameStore.getState();
     expect(state.phase).toBe('playing');
     if (state.phase !== 'playing') return;
-    expect(state.snapshot).toEqual(s);
+    expect(state.snapshot).toEqual(p);
     expect(state.mySide).toBe('left');
   });
 
-  it('is a no-op when not paused', () => {
-    useGameStore.getState().handleGameResumed(snapshot());
+  it('is a no-op when in idle with myUserId null (connected not yet received)', () => {
+    // myUserId is null in beforeEach — store is idle and has not received 'connected' yet.
+    useGameStore.getState().handleGameResumed(resumedPayload());
     expect(useGameStore.getState().phase).toBe('idle');
+  });
+
+  it('is a no-op when in queued phase', () => {
+    useGameStore.getState().setConnected(42);
+    useGameStore.getState().setQueued();
+    useGameStore.getState().handleGameResumed(resumedPayload());
+    expect(useGameStore.getState().phase).toBe('queued');
+  });
+
+  // ── cold-start rehydration (idle → playing) ──────────────────────────────────
+
+  it('idle → playing when myUserId is set and players contains it (left side)', () => {
+    useGameStore.getState().setConnected(42); // simulates 'connected' arriving after reload
+    useGameStore.getState().handleGameResumed(resumedPayload(1, { '42': 'left', '17': 'right' }));
+
+    const state = useGameStore.getState();
+    expect(state.phase).toBe('playing');
+    if (state.phase !== 'playing') return;
+    expect(state.matchId).toBe(1);
+    expect(state.myUserId).toBe(42);
+    expect(state.mySide).toBe('left');
+    expect(state.players).toEqual({ '42': 'left', '17': 'right' });
+    expect(state.snapshot).toBeDefined();
+  });
+
+  it('idle → playing derives mySide correctly for the right-side player', () => {
+    useGameStore.getState().setConnected(17);
+    useGameStore.getState().handleGameResumed(resumedPayload(1, { '42': 'left', '17': 'right' }));
+
+    const state = useGameStore.getState();
+    expect(state.phase).toBe('playing');
+    if (state.phase !== 'playing') return;
+    expect(state.mySide).toBe('right');
+  });
+
+  it('idle → playing is a no-op and warns when myUserId is not in players', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    useGameStore.getState().setConnected(99); // userId 99 not in players map
+    useGameStore.getState().handleGameResumed(resumedPayload(1, { '42': 'left', '17': 'right' }));
+
+    expect(useGameStore.getState().phase).toBe('idle');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('myUserId not found in players'),
+    );
+    warnSpy.mockRestore();
   });
 });
 
