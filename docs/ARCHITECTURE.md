@@ -21,6 +21,8 @@ Internally, it's organized by feature (auth, profile, game, ...), each owning it
 
 ## Gateways
 
+The two gateways define a hard boundary between browser-facing and internal traffic. Browser-originated requests — REST through gateway-api, WebSocket frames through gateway-ws — are north-south: they cross from the public internet into the system and are authenticated at the gateway before reaching any backend service. When backend services communicate with each other — for example, match-service publishing a result that user-service consumes — that is east-west: internal-to-internal traffic that stays on backend-net and never involves the public internet or the browser, even when it travels through gateway-ws as a routing hub.
+
 ### gateway-api
 
 Sole entry point for REST calls. Validates the JWT access token on every request and rejects unauthenticated ones with 401, except for the public auth routes. No business logic, no database access — it only knows whether a token is valid and where to forward the request. Reaches auth-service and user-service. Sits on both networks.
