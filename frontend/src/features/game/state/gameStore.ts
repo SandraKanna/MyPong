@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { GameStatePayload } from '../../../shared/ws/wsMessages';
+import type { GameStatePayload, GameResumedPayload } from '../../../shared/ws/wsMessages';
 import { useAuthStore } from '../../auth/state/authState';
 import { disconnectWs, sendWs } from '../../../shared/ws/wsClient';
 
@@ -76,7 +76,7 @@ interface GameActions {
   handleMatchRejected: (message: string) => void;
   handleGameState: (snapshot: GameStatePayload) => void;
   handleGamePaused: (disconnectedUserId: number, graceEndsAt: string) => void;
-  handleGameResumed: (snapshot: GameStatePayload) => void;
+  handleGameResumed: (payload: GameResumedPayload) => void;
   handleGameEnd: (winnerId: number, reason: 'completed' | 'forfeit', score: { left: number; right: number }) => void;
   reset: () => void;
 }
@@ -106,26 +106,36 @@ export const useGameStore = create<GameState & GameActions>()((set, get) => ({
 
   setQueued() {
     const state = get();
-    if (state.phase !== 'idle') return;
-    if (state.myUserId === null) return; // no-op: 'connected' hasn't arrived yet, no real userId to carry forward
+    if (state.phase !== 'idle') 
+      return;
+    if (state.myUserId === null) 
+      return; // no-op: 'connected' hasn't arrived yet, no real userId to carry forward
     set({ phase: 'queued', myUserId: state.myUserId });
   },
 
   cancelQueued() {
     const state = get();
-    if (state.phase !== 'queued') return;
+    if (state.phase !== 'queued') 
+      return;
     set({ phase: 'idle', myUserId: state.myUserId });
   },
 
   handleMatchMatched(matchId, players, startsAt) {
     const state = get();
-    if (state.phase !== 'queued') return;
+    // Also accepts 'idle' to handle cold-start rehydration: if the player
+    // reloaded during the countdown, game-service re-sends match:matched on
+    // reconnect so the store can land on CountdownOverlay instead of the Lobby.
+    if (state.phase !== 'queued' && state.phase !== 'idle') 
+      return;
+    if (state.myUserId === null) 
+      return; // 'connected' hasn't arrived yet — no userId to carry forward
     set({ phase: 'matched', myUserId: state.myUserId, matchId, players, startsAt });
   },
 
   handleMatchRejected(message) {
     const state = get();
-    if (state.phase !== 'queued') return;
+    if (state.phase !== 'queued') 
+      return;
     console.warn('[gameStore] match:rejected —', message); // not stored; no UI consumer yet
     set({ phase: 'idle', myUserId: state.myUserId });
   },
@@ -162,19 +172,36 @@ export const useGameStore = create<GameState & GameActions>()((set, get) => ({
 
   handleGamePaused(disconnectedUserId, graceEndsAt) {
     const state = get();
-    if (state.phase !== 'playing') return;
+    if (state.phase !== 'playing')
+      return;
     set({ phase: 'paused', myUserId: state.myUserId, matchId: state.matchId, players: state.players, mySide: state.mySide, snapshot: state.snapshot, disconnectedUserId, graceEndsAt });
   },
 
-  handleGameResumed(snapshot) {
+  handleGameResumed(payload) {
     const state = get();
-    if (state.phase !== 'paused') return;
-    set({ phase: 'playing', myUserId: state.myUserId, matchId: state.matchId, players: state.players, mySide: state.mySide, snapshot });
+
+    if (state.phase === 'idle' && state.myUserId !== null) {
+      // Cold-start rehydration: a full page reload wiped React/Zustand state while
+      // game-service kept the session alive. game:resumed now carries `players` so
+      // mySide can be derived without a separate backend query.
+      const mySide = payload.players[String(state.myUserId)];
+      if (mySide !== 'left' && mySide !== 'right') {
+        console.warn('[gameStore] handleGameResumed: myUserId not found in players, ignoring');
+        return;
+      }
+      set({ phase: 'playing', myUserId: state.myUserId, matchId: payload.matchId, players: payload.players, mySide, snapshot: payload });
+      return;
+    }
+
+    if (state.phase !== 'paused') 
+      return;
+    set({ phase: 'playing', myUserId: state.myUserId, matchId: state.matchId, players: state.players, mySide: state.mySide, snapshot: payload });
   },
 
   handleGameEnd(winnerId, reason, score) {
     const state = get();
-    if (state.phase !== 'playing' && state.phase !== 'paused' && state.phase !== 'matched') return;
+    if (state.phase !== 'playing' && state.phase !== 'paused' && state.phase !== 'matched') 
+      return;
     set({ phase: 'ended', myUserId: state.myUserId, winnerId, reason, score, players: state.players });
   },
 

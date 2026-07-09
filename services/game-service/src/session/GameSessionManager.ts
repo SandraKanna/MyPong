@@ -14,6 +14,7 @@ export interface Session {
 interface PendingMatch {
   userIds:             [number, number];
   startsAt:            string;
+  players:             Map<number, 'left' | 'right'>;
   disconnectedUserId?: number;
 }
 
@@ -72,7 +73,7 @@ export class GameSessionManager {
     const startsAt = (typeof rawStartsAt === 'string') ? rawStartsAt : new Date().toISOString();
     const delay    = Math.max(0, new Date(startsAt).getTime() - Date.now());
 
-    const pendingEntry: PendingMatch = { userIds, startsAt };
+    const pendingEntry: PendingMatch = { userIds, startsAt, players };
     this.pendingMatchIds.set(matchId, pendingEntry);
 
     const startSession = () => {
@@ -225,16 +226,19 @@ export class GameSessionManager {
       session.game.resume();
 
       const state = session.game.getState();
-      this.send({ type: 'game:resumed', to: session.userIds, payload: { matchId, ...state } });
+      this.send({ type: 'game:resumed', to: session.userIds, payload: { matchId, players: Object.fromEntries(session.players), ...state } });
       return;
     }
 
     // ── Pending session (player reconnects during countdown) ─────────────────────
-    for (const pending of this.pendingMatchIds.values()) {
+    for (const [matchId, pending] of this.pendingMatchIds.entries()) {
       if (pending.disconnectedUserId !== userId) continue;
       pending.disconnectedUserId = undefined;
-      // No game:resumed — the game hasn't started yet. startSession will create the
-      // session normally at startsAt; the first game:state is the implicit signal.
+      // Re-send match:matched to the reconnecting player only. Their store was wiped
+      // by the reload (phase reset to 'idle'), so they need the match context again
+      // to land on CountdownOverlay rather than the Lobby. startSession still fires
+      // at startsAt; the first game:state frame transitions matched → playing as normal.
+      this.send({ type: 'match:matched', to: [userId], payload: { matchId, players: Object.fromEntries(pending.players), startsAt: pending.startsAt } });
       return;
     }
   }
