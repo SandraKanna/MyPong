@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "services/**"
       - "frontend/**"
@@ -12,6 +14,10 @@ on:
   pull_request:
     branches:
       - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 # Backend jobs run sequentially: lint → typecheck → test → docker-build.
 # Each stage uses a matrix over services so all services run in parallel within
