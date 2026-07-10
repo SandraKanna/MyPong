@@ -16,7 +16,7 @@ export const DEFAULT_PHYSICS_CONFIG: PhysicsConfig = {
   fieldWidth:         800,
   fieldHeight:        600,
   ballRadius:         10,
-  ballInitialSpeed:   5,
+  ballInitialSpeed:   8,
   ballMinSpeedFactor: 0.5,
   ballMaxSpeedFactor: 3.0,
   paddleWidth:        12,
