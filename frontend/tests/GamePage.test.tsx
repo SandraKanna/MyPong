@@ -108,6 +108,71 @@ describe('GamePage — unmount sends phase-aware WS message', () => {
   });
 });
 
+describe('GamePage — handleStartAI', () => {
+  it('sends game:startAI with the difficulty received from LobbyView', async () => {
+    // Simulate the store calling handleStartAI through the rendered LobbyView.
+    // Since we can't click through the full component tree without real WS,
+    // we exercise sendWs directly by verifying the GamePage wires the handler.
+    // The LobbyView tests cover the click path; here we test the WS send shape.
+    // Trigger by simulating what GamePage's handleStartAI does: call sendWs.
+    //
+    // Approach: render GamePage and reach into the store to call handleStartAI
+    // indirectly via the rendered LobbyView. We import userEvent for the click.
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const { screen } = await import('@testing-library/react');
+    const { render } = await import('@testing-library/react');
+
+    useGameStore.setState({ phase: 'idle', myUserId: null });
+
+    const user = userEvent.setup();
+    render(<GamePage />);
+
+    // Click hard difficulty then Play vs AI to trigger handleStartAI('hard').
+    await user.click(screen.getByRole('button', { name: 'hard' }));
+    await user.click(screen.getByRole('button', { name: 'Play vs AI' }));
+
+    expect(vi.mocked(sendWs)).toHaveBeenCalledWith({
+      type: 'game:startAI',
+      payload: { difficulty: 'hard' },
+    });
+  });
+
+  it('sends game:startAI with normal by default when Play vs AI is clicked without changing difficulty', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const { screen } = await import('@testing-library/react');
+    const { render } = await import('@testing-library/react');
+
+    useGameStore.setState({ phase: 'idle', myUserId: null });
+
+    const user = userEvent.setup();
+    render(<GamePage />);
+
+    await user.click(screen.getByRole('button', { name: 'Play vs AI' }));
+
+    expect(vi.mocked(sendWs)).toHaveBeenCalledWith({
+      type: 'game:startAI',
+      payload: { difficulty: 'normal' },
+    });
+  });
+
+  it('does not call setQueued when Play vs AI is clicked', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const { screen } = await import('@testing-library/react');
+    const { render } = await import('@testing-library/react');
+
+    useGameStore.setState({ phase: 'idle', myUserId: null });
+    const setQueuedSpy = vi.spyOn(useGameStore.getState(), 'setQueued');
+
+    const user = userEvent.setup();
+    render(<GamePage />);
+
+    await user.click(screen.getByRole('button', { name: 'Play vs AI' }));
+
+    expect(setQueuedSpy).not.toHaveBeenCalled();
+    setQueuedSpy.mockRestore();
+  });
+});
+
 describe('GamePage — unmount cleanup', () => {
   it('calls reset() on every unmount regardless of phase', () => {
     const resetSpy = vi.spyOn(useGameStore.getState(), 'reset');

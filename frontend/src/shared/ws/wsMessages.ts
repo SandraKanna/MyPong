@@ -35,9 +35,10 @@ export type IncomingMessage =
 // gateway-ws injects userId from the JWT and ignores any client-supplied value.
 // No userId field belongs on any browser-originated message.
 
-export type MatchJoinMessage   = { type: 'match:join' };
-export type MatchCancelMessage = { type: 'match:cancel' };
-export type GameLeaveMessage   = { type: 'game:leave' };
-export type GameInputMessage   = { type: 'game:input'; payload: { matchId: number; direction: 'up' | 'down' | 'stop' } };
+export type MatchJoinMessage    = { type: 'match:join' };
+export type MatchCancelMessage  = { type: 'match:cancel' };
+export type GameLeaveMessage    = { type: 'game:leave' };
+export type GameInputMessage    = { type: 'game:input';   payload: { matchId: number; direction: 'up' | 'down' | 'stop' } };
+export type GameStartAIMessage  = { type: 'game:startAI'; payload: { difficulty: 'easy' | 'normal' | 'hard' } };
 
-export type OutgoingMessage = MatchJoinMessage | MatchCancelMessage | GameLeaveMessage | GameInputMessage;
+export type OutgoingMessage = MatchJoinMessage | MatchCancelMessage | GameLeaveMessage | GameInputMessage | GameStartAIMessage;
