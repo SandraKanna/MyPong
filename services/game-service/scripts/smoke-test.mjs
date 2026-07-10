@@ -124,6 +124,13 @@ async function getAccessToken(label) {
   return accessToken;
 }
 
+async function getGuestToken() {
+  const res = await fetch(`${API_URL}/api/auth/guest`, { method: 'POST' });
+  if (!res.ok) throw new Error(`guest token failed: ${res.status}`);
+  const { accessToken } = await res.json();
+  return accessToken;
+}
+
 // Connects a browser to gateway-ws, authenticates, and returns { ws, userId }.
 async function connectBrowser(token) {
   const ws  = await wsConnect(WS_URL);
@@ -432,8 +439,70 @@ async function main() {
       }
     }
 
+    // ── Tests 12-13: game:startAI — guest PvE (no account, guest token) ─────────
+    // Proves the cross-service wiring for unauthenticated play: auth-service issues
+    // the guest token, gateway-ws accepts it, game-service creates the PvE session,
+    // and the AI paddle moves — same end-to-end chain as the logged-in PvE case above.
+    let guestBrowser;
+    try {
+      const guestToken = await getGuestToken();
+      guestBrowser = await connectBrowser(guestToken);
+      sockets.push(guestBrowser.ws);
+      pass(`guest browser authenticates (userId: ${guestBrowser.userId}, negative = guest)`);
+    } catch (err) {
+      fail('guest browser authenticates', err.message);
+      process.exit(1);
+    }
+
+    const guestFrames = [];
+    function guestStateCollector(data) {
+      let msg;
+      try { msg = JSON.parse(data.toString()); } catch { return; }
+      if (msg.type === 'game:state') guestFrames.push(msg);
+    }
+    guestBrowser.ws.on('message', guestStateCollector);
+
+    guestBrowser.ws.send(JSON.stringify({ type: 'game:startAI', payload: { difficulty: 'hard' } }));
+
+    try {
+      const matched = await wsNextMatching(guestBrowser.ws, (m) => m.type === 'match:matched', 3000);
+      const mp = matched.payload;
+      const AI_BOT_USER_ID = 0;
+      if (
+        typeof mp?.matchId  === 'number'  &&
+        mp?.players?.[String(guestBrowser.userId)] === 'left'  &&
+        mp?.players?.[String(AI_BOT_USER_ID)]      === 'right' &&
+        typeof mp?.startsAt === 'string'
+      ) {
+        pass(`guest game:startAI → match:matched (matchId: ${mp.matchId}, guest: left, bot: right)`);
+      } else {
+        fail('guest game:startAI → match:matched shape invalid', JSON.stringify(matched));
+      }
+    } catch (err) {
+      fail('guest game:startAI → no match:matched within 3s', err.message);
+    }
+
+    // Wait for the 3-second countdown + 8 seconds of live game time.
+    await new Promise((resolve) => setTimeout(resolve, 11_500));
+
+    guestBrowser.ws.removeListener('message', guestStateCollector);
+
+    // Test 13: AI paddle moved for the guest session — same assertion as the logged-in PvE case.
+    if (guestFrames.length === 0) {
+      fail('guest PvE — no game:state frames received after countdown (ai-bot-service alive?)');
+    } else {
+      const firstRightY = guestFrames[0].payload.paddles.rightY;
+      const botMoved    = guestFrames.some((f) => f.payload.paddles.rightY !== firstRightY);
+      if (botMoved) {
+        const lastRightY = guestFrames[guestFrames.length - 1].payload.paddles.rightY;
+        pass(`guest PvE — AI paddle moved (${firstRightY} → ${lastRightY} over ${guestFrames.length} frames)`);
+      } else {
+        fail(`guest PvE — AI paddle static across ${guestFrames.length} frames`);
+      }
+    }
+
   } finally {
-    // ── Test 12: clean shutdown ────────────────────────────────────────────────
+    // ── Test 14: clean shutdown ────────────────────────────────────────────────
     const closePromises = sockets.map((ws) => {
       const p = wsClose(ws);
       ws.close(1000);
