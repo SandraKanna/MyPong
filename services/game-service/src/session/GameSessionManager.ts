@@ -1,5 +1,7 @@
 import type { WsEnvelope } from '@mypong/types';
 import { Game } from '../physics/game';
+import { DEFAULT_PHYSICS_CONFIG } from '../physics/physicsConfig';
+import { AI_BOT_USER_ID } from './constants';
 
 export interface Session {
   game:              Game;
@@ -7,6 +9,7 @@ export interface Session {
   userIds:           [number, number];
   interval:          ReturnType<typeof setInterval>;
   startedAt:         Date;
+  mode:              'pvp' | 'pve';
   disconnectedUserId?: number;
   disconnectTimer?:    ReturnType<typeof setTimeout>;
 }
@@ -15,6 +18,7 @@ interface PendingMatch {
   userIds:             [number, number];
   startsAt:            string;
   players:             Map<number, 'left' | 'right'>;
+  mode:                'pvp' | 'pve';
   disconnectedUserId?: number;
 }
 
@@ -33,6 +37,10 @@ interface AssignPayload {
 interface InputPayload {
   matchId:   number;
   direction: string;
+}
+
+interface StartAIPayload {
+  difficulty?: string;
 }
 
 export class GameSessionManager {
@@ -73,7 +81,7 @@ export class GameSessionManager {
     const startsAt = (typeof rawStartsAt === 'string') ? rawStartsAt : new Date().toISOString();
     const delay    = Math.max(0, new Date(startsAt).getTime() - Date.now());
 
-    const pendingEntry: PendingMatch = { userIds, startsAt, players };
+    const pendingEntry: PendingMatch = { userIds, startsAt, players, mode: 'pvp' };
     this.pendingMatchIds.set(matchId, pendingEntry);
 
     const startSession = () => {
@@ -123,13 +131,94 @@ export class GameSessionManager {
         }
       }, this.tickIntervalMs);
 
-      this.sessions.set(matchId, { game, players, userIds, interval, startedAt });
+      this.sessions.set(matchId, { game, players, userIds, interval, startedAt, mode: 'pvp' });
     };
 
     if (delay > 0) {
       setTimeout(startSession, delay);
     } else {
       startSession(); // synchronous — preserves existing test behaviour (no timer advance needed)
+    }
+  }
+
+  handleStartAI(envelope: WsEnvelope): void {
+    const payload = envelope.payload as StartAIPayload | undefined;
+    const { userId } = envelope;
+    if (!payload || userId === undefined) return;
+
+    const { difficulty } = payload;
+    if (difficulty !== 'easy' && difficulty !== 'medium' && difficulty !== 'hard') return;
+
+    // Reject if user already has an active or pending session (PvP or PvE).
+    for (const session of this.sessions.values()) {
+      if (session.players.has(userId)) {
+        this.send({ type: 'match:rejected', to: [userId], payload: { reason: 'already_in_session', message: 'You are already in a match.' } });
+        return;
+      }
+    }
+    for (const pending of this.pendingMatchIds.values()) {
+      if (pending.userIds.includes(userId)) {
+        this.send({ type: 'match:rejected', to: [userId], payload: { reason: 'already_in_session', message: 'You are already in a match.' } });
+        return;
+      }
+    }
+
+    const matchId  = this.generatePveMatchId();
+    const startsAt = new Date(Date.now() + 3_000).toISOString();
+    const players  = new Map<number, 'left' | 'right'>([[userId, 'left'], [AI_BOT_USER_ID, 'right']]);
+    const userIds: [number, number] = [userId, AI_BOT_USER_ID];
+
+    const pendingEntry: PendingMatch = { userIds, startsAt, players, mode: 'pve' };
+    this.pendingMatchIds.set(matchId, pendingEntry);
+
+    // match:matched reuses the existing 3-second countdown frontend flow.
+    this.send({ type: 'match:matched', to: [userId], payload: { matchId, players: Object.fromEntries(players), startsAt } });
+    // Notify the bot service so it can prepare its session state.
+    this.send({ type: 'ai-bot:sessionStart', payload: { matchId, difficulty, botSide: 'right', physicsConfig: DEFAULT_PHYSICS_CONFIG } });
+
+    const delay = Math.max(0, new Date(startsAt).getTime() - Date.now());
+
+    const startSession = () => {
+      this.pendingMatchIds.delete(matchId);
+
+      if (pendingEntry.disconnectedUserId !== undefined) {
+        // Human disconnected during the countdown — cancel without a DB record.
+        this.send({ type: 'ai-bot:sessionEnd', payload: { matchId } });
+        return;
+      }
+
+      const game      = this.gameFactory();
+      const startedAt = new Date();
+
+      const interval = setInterval(() => {
+        game.update();
+        const state = game.getState();
+
+        // game:state to the human player (to:[userId] — AI_BOT_USER_ID has no socket).
+        this.send({ type: 'game:state', to: [userId], payload: { matchId, ...state } });
+        // ai-bot:state includes velocity so the bot can predict ball trajectory.
+        this.send({ type: 'ai-bot:state', payload: { matchId, ball: { x: game.ball.x, y: game.ball.y, vx: game.ball.vx, vy: game.ball.vy }, paddles: state.paddles, score: state.score } });
+
+        if (game.isGameOver) {
+          clearInterval(interval);
+          this.sessions.delete(matchId);
+
+          const { score } = state;
+          const winnerId  = score.left > score.right ? userId : AI_BOT_USER_ID;
+
+          // PvE: no match:result — this session has no DB record.
+          this.send({ type: 'ai-bot:sessionEnd', payload: { matchId } });
+          this.send({ type: 'game:end', to: [userId], payload: { matchId, winnerId, score, reason: 'completed' } });
+        }
+      }, this.tickIntervalMs);
+
+      this.sessions.set(matchId, { game, players, userIds, interval, startedAt, mode: 'pve' });
+    };
+
+    if (delay > 0) {
+      setTimeout(startSession, delay);
+    } else {
+      startSession();
     }
   }
 
@@ -153,10 +242,34 @@ export class GameSessionManager {
     session.game.setPaddleDirection(side, direction);
   }
 
+  handleBotInput(envelope: WsEnvelope): void {
+    const payload = envelope.payload as InputPayload | undefined;
+    if (!payload || typeof payload.matchId !== 'number') return;
+
+    const { matchId, direction } = payload;
+    if (direction !== 'up' && direction !== 'down' && direction !== 'stop') return;
+
+    const session = this.sessions.get(matchId);
+    if (!session || session.mode !== 'pve') return;
+
+    // Bot always controls the right paddle in PvE sessions.
+    session.game.setPaddleDirection('right', direction);
+  }
+
   handlePlayerDisconnect(userId: number): void {
     // ── Active session ───────────────────────────────────────────────────────────
     for (const [matchId, session] of this.sessions) {
       if (!session.players.has(userId)) continue;
+
+      if (session.mode === 'pve') {
+        // PvE: immediate teardown with no grace window — the bot doesn't wait.
+        clearInterval(session.interval);
+        this.sessions.delete(matchId);
+        this.send({ type: 'ai-bot:sessionEnd', payload: { matchId } });
+        // Skip game:end — the browser socket is already gone (involuntary disconnect).
+        return;
+      }
+
       // Intentional: `userId` is captured by closure in the setTimeout below, so
       // the first disconnector always loses when the timer fires. Second disconnect
       // while the timer is running is a no-op — do not override disconnectedUserId.
@@ -188,6 +301,12 @@ export class GameSessionManager {
 
       pending.disconnectedUserId = userId;
 
+      if (pending.mode === 'pve') {
+        // PvE: no human opponent to notify with game:paused.
+        // startSession fires at startsAt and cancels cleanly if disconnectedUserId is set.
+        return;
+      }
+
       const opponentId = pending.userIds.find((id) => id !== userId)!;
       // No separate timer: startSession already fires at startsAt, which is the
       // natural grace deadline. Use startsAt directly as graceEndsAt.
@@ -201,6 +320,18 @@ export class GameSessionManager {
     // Active session: forfeit immediately, no grace window, no game:paused to opponent.
     for (const [matchId, session] of this.sessions) {
       if (!session.players.has(userId)) continue;
+
+      if (session.mode === 'pve') {
+        // PvE: immediate teardown. Human leaving voluntarily gets a game:end.
+        clearTimeout(session.disconnectTimer);
+        clearInterval(session.interval);
+        this.sessions.delete(matchId);
+        const { score } = session.game.getState();
+        this.send({ type: 'game:end', to: [userId], payload: { matchId, winnerId: AI_BOT_USER_ID, score, reason: 'forfeit' } });
+        this.send({ type: 'ai-bot:sessionEnd', payload: { matchId } });
+        return;
+      }
+
       // Cancel any grace timer already armed from the opponent's prior disconnect to prevent a double forfeit.
       clearTimeout(session.disconnectTimer);
       clearInterval(session.interval);
@@ -234,6 +365,13 @@ export class GameSessionManager {
     for (const [matchId, pending] of this.pendingMatchIds.entries()) {
       if (pending.disconnectedUserId !== userId) continue;
       pending.disconnectedUserId = undefined;
+
+      if (pending.mode === 'pve') {
+        // Re-send match:matched so the human sees CountdownOverlay instead of Lobby.
+        this.send({ type: 'match:matched', to: [userId], payload: { matchId, players: Object.fromEntries(pending.players), startsAt: pending.startsAt } });
+        return;
+      }
+
       // Re-send match:matched to the reconnecting player only. Their store was wiped
       // by the reload (phase reset to 'idle'), so they need the match context again
       // to land on CountdownOverlay rather than the Lobby. startSession still fires
@@ -249,6 +387,16 @@ export class GameSessionManager {
 
   sessionCount(): number {
     return this.sessions.size;
+  }
+
+  private generatePveMatchId(): number {
+    // Use the upper half of the 32-bit int range to avoid any collision with
+    // Postgres serial IDs (which start at 1 and grow upward).
+    let matchId: number;
+    do {
+      matchId = Math.floor(Math.random() * 2 ** 31) + 2 ** 31;
+    } while (this.sessions.has(matchId) || this.pendingMatchIds.has(matchId));
+    return matchId;
   }
 
   private emitForfeit(
