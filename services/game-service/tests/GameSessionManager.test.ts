@@ -593,7 +593,7 @@ describe('GameSessionManager', () => {
   it('handleStartAI creates a pending PvE session with human on left and bot on right', () => {
     vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
 
-    manager.handleStartAI(makeStartAI(42, 'medium'));
+    manager.handleStartAI(makeStartAI(42, 'normal'));
 
     // Session is pending (3s countdown) — not active yet.
     expect(manager.sessionCount()).toBe(0);
@@ -680,7 +680,7 @@ describe('GameSessionManager', () => {
 
   it('PvE tick sends game:state to human only and ai-bot:state (no `to`) per tick', () => {
     vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
-    manager.handleStartAI(makeStartAI(42, 'medium'));
+    manager.handleStartAI(makeStartAI(42, 'normal'));
     vi.advanceTimersByTime(3_000); // session starts
     sent.length = 0;
 

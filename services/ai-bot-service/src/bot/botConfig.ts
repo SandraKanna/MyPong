@@ -1,4 +1,4 @@
-export type Difficulty = 'easy' | 'medium' | 'hard';
+export type Difficulty = 'easy' | 'normal' | 'hard';
 
 export interface BotPreset {
   reactionDelayMs:  number; // TUNE: higher = bot takes longer to start tracking after session start
@@ -8,6 +8,6 @@ export interface BotPreset {
 
 export const BOT_PRESETS: Record<Difficulty, BotPreset> = {
   easy:   { reactionDelayMs: 300, trackingErrorPx: 40, updateIntervalMs: 100 },
-  medium: { reactionDelayMs: 120, trackingErrorPx: 15, updateIntervalMs: 50  },
+  normal: { reactionDelayMs: 120, trackingErrorPx: 15, updateIntervalMs: 50  },
   hard:   { reactionDelayMs: 0,   trackingErrorPx: 0,  updateIntervalMs: 16  },
 };

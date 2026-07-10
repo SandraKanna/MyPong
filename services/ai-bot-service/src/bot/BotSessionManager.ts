@@ -20,6 +20,12 @@ interface BotSession {
   lastEvalMs:      number;  // wall-clock ms of last direction evaluation
   sessionStartMs:  number;  // wall-clock ms when session was created (for reactionDelay)
   currentDir:      'up' | 'down' | 'stop';
+  // Cached target Y for the current incoming-ball approach. Computed once when the
+  // ball first starts moving toward this bot's paddle and held until the ball
+  // reverses direction. This prevents the random tracking error from being
+  // re-rolled on every evaluation tick, which causes visible paddle jitter.
+  cachedTargetY:   number | null;
+  ballApproaching: boolean; // tracks the previous approaching state to detect transitions
 }
 
 interface SessionStartPayload {
@@ -53,7 +59,7 @@ export class BotSessionManager {
   handleSessionStart(envelope: WsEnvelope): void {
     const payload = envelope.payload as SessionStartPayload | undefined;
     if (!payload || typeof payload.matchId !== 'number') return;
-    if (payload.difficulty !== 'easy' && payload.difficulty !== 'medium' && payload.difficulty !== 'hard') return;
+    if (payload.difficulty !== 'easy' && payload.difficulty !== 'normal' && payload.difficulty !== 'hard') return;
     if (payload.botSide !== 'left' && payload.botSide !== 'right') return;
 
     const { matchId, difficulty, botSide, physicsConfig } = payload;
@@ -62,10 +68,12 @@ export class BotSessionManager {
       matchId,
       botSide,
       difficulty,
-      cfg:            physicsConfig,
-      lastEvalMs:     0,
-      sessionStartMs: Date.now(),
-      currentDir:     'stop',
+      cfg:             physicsConfig,
+      lastEvalMs:      0,
+      sessionStartMs:  Date.now(),
+      currentDir:      'stop',
+      cachedTargetY:   null,
+      ballApproaching: false,
     });
   }
 
@@ -101,14 +109,21 @@ export class BotSessionManager {
     const movingTowardBot = botSide === 'right' ? ball.vx > 0 : ball.vx < 0;
 
     if (movingTowardBot && ball.vx !== 0) {
-      // Ball is heading toward this bot's paddle — predict impact Y.
-      const stepsToImpact = (faceX - ball.x) / ball.vx;
-      const predicted     = predictBallY(ball.y, ball.vy, stepsToImpact, cfg.fieldHeight, cfg.ballRadius);
-      // Apply a random tracking error to simulate imperfect play.
-      const error         = (Math.random() * 2 - 1) * preset.trackingErrorPx;
-      targetY             = predicted + error;
+      // Recompute the cached target only when the ball just turned toward this bot
+      // (transition from away → toward). Holding the target stable for the full
+      // approach avoids re-rolling the random error every tick, which causes jitter.
+      if (!session.ballApproaching) {
+        const stepsToImpact    = (faceX - ball.x) / ball.vx;
+        const predicted        = predictBallY(ball.y, ball.vy, stepsToImpact, cfg.fieldHeight, cfg.ballRadius);
+        const error            = (Math.random() * 2 - 1) * preset.trackingErrorPx;
+        session.cachedTargetY  = predicted + error;
+        session.ballApproaching = true;
+      }
+      targetY = session.cachedTargetY!;
     } else {
-      // Ball moving away — drift toward field center to be ready for the next rally.
+      // Ball moving away — clear the cache and drift toward field center.
+      session.cachedTargetY   = null;
+      session.ballApproaching = false;
       targetY = cfg.fieldHeight / 2;
     }
 
