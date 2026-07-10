@@ -51,6 +51,16 @@ req_jar() {
 body()   { echo "$1" | head -n 1; }
 status() { echo "$1" | tail -n 1; }
 
+# Request with an Authorization: Bearer header (no cookie jar).
+req_auth() {
+  local method="$1"
+  local path="$2"
+  local token="$3"
+  curl -s -w "\n%{http_code}" -X "$method" \
+    -H "Authorization: Bearer $token" \
+    "${BASE_URL}${path}"
+}
+
 assert_status() {
   local name="$1"
   local expected="$2"
@@ -122,6 +132,15 @@ assert_status "POST /api/auth/refresh — after logout" "401" "$(status "$r")" "
 # 10. Refresh with no cookie at all → 401 (deny: guard rejects cookieless request)
 r=$(req POST /api/auth/refresh)
 assert_status "POST /api/auth/refresh — no cookie (deny)" "401" "$(status "$r")" "$(body "$r")"
+
+# 11. POST /api/auth/guest → 200 with accessToken (no body, no cookie)
+r=$(req POST /api/auth/guest)
+assert_status "POST /api/auth/guest — returns 200 with accessToken" "200" "$(status "$r")" "$(body "$r")"
+GUEST_TOKEN=$(body "$r" | jq -r '.accessToken')
+
+# 12. Guest token on protected REST endpoint → 401 (deny: guest cannot use REST)
+r=$(req_auth GET /api/users/me "$GUEST_TOKEN")
+assert_status "GET /api/users/me with guest token — denied (deny)" "401" "$(status "$r")" "$(body "$r")"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 

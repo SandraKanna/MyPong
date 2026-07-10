@@ -110,6 +110,14 @@ export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   });
 
 
+  fastify.post('/guest', async (_request, reply) => {
+    // No rate limiting: guest tokens are stateless and cheap to issue — same risk
+    // posture as other unauthenticated endpoints in this portfolio-scale project.
+    const accessToken = authService.generateGuestToken();
+    return reply.send({ accessToken });
+  });
+
+
   fastify.delete('/session', async (request, reply) => {
     const token = request.cookies.refreshToken;
     if (!token) {

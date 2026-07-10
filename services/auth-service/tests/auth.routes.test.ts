@@ -25,6 +25,7 @@ vi.mock('argon2', () => ({
 }));
 
 // Imported after mocks so they receive the mocked modules.
+import jwt from 'jsonwebtoken';
 import { buildApp } from '../src/app';
 import { db } from '../src/db';
 import { generateRefreshToken } from '../src/services/auth.service';
@@ -64,6 +65,39 @@ describe('auth-service routes', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     app = await buildApp();
+  });
+
+  // ── POST /guest ─────────────────────────────────────────────────────────────
+
+  describe('POST /guest', () => {
+    it('case 10 — returns 200 with accessToken, no cookie, no DB access', async () => {
+      const res = await app.inject({ method: 'POST', url: '/guest' });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(typeof body.accessToken).toBe('string');
+      expect(body).not.toHaveProperty('refreshToken');
+      expect(mockQuery).not.toHaveBeenCalled();
+
+      const setCookie = res.headers['set-cookie'];
+      expect(setCookie).toBeUndefined();
+    });
+
+    it('case 11 — token sub is a negative integer and type is guest', () => {
+      const JWT_SECRET = 'a'.repeat(64);
+
+      const res = app.inject({ method: 'POST', url: '/guest' });
+      // Run synchronously by re-invoking inject in a way we can immediately decode
+      // the token. We use a promise chain rather than awaiting twice in one test.
+      return res.then((r) => {
+        const { accessToken } = r.json() as { accessToken: string };
+        const decoded = jwt.verify(accessToken, JWT_SECRET) as { sub: string; type: string };
+        expect(decoded.type).toBe('guest');
+        const userId = Number(decoded.sub);
+        expect(Number.isInteger(userId)).toBe(true);
+        expect(userId).toBeLessThan(0);
+      });
+    });
   });
 
   // ── POST /register ──────────────────────────────────────────────────────────
