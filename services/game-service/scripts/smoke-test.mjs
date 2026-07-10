@@ -501,15 +501,35 @@ async function main() {
       }
     }
 
+    // ── Test 14: game:startAI with 'medium' (removed value) is silently ignored ──
+    // 'medium' was renamed to 'normal'. The handler drops unknown difficulty values,
+    // so the browser receives no match:matched — confirms the validation guard works.
+    {
+      const token14 = await getAccessToken('medium-deny').catch(() => null);
+      if (token14) {
+        const browser14 = await connectBrowser(token14).catch(() => null);
+        if (browser14) {
+          sockets.push(browser14.ws);
+          browser14.ws.send(JSON.stringify({ type: 'game:startAI', payload: { difficulty: 'medium' } }));
+          try {
+            await wsNextMatching(browser14.ws, (m) => m.type === 'match:matched', 500);
+            fail('game:startAI difficulty:medium — match:matched received but should have been rejected');
+          } catch {
+            pass('game:startAI difficulty:medium — no match:matched (obsolete value correctly rejected)');
+          }
+        }
+      }
+    }
+
   } finally {
-    // ── Test 14: clean shutdown ────────────────────────────────────────────────
+    // ── Test 15: clean shutdown ────────────────────────────────────────────────
     const closePromises = sockets.map((ws) => {
       const p = wsClose(ws);
       ws.close(1000);
       return p;
     });
     await Promise.all(closePromises);
-    pass('all sockets closed cleanly');
+    pass('all sockets closed cleanly (Test 15)');
   }
 
   console.log(`\n  ${passed} passed, ${failed} failed\n`);

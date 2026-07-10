@@ -147,7 +147,7 @@ export class GameSessionManager {
     if (!payload || userId === undefined) return;
 
     const { difficulty } = payload;
-    if (difficulty !== 'easy' && difficulty !== 'medium' && difficulty !== 'hard') return;
+    if (difficulty !== 'easy' && difficulty !== 'normal' && difficulty !== 'hard') return;
 
     // Reject if user already has an active or pending session (PvP or PvE).
     for (const session of this.sessions.values()) {
