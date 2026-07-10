@@ -39,6 +39,6 @@ export type MatchJoinMessage    = { type: 'match:join' };
 export type MatchCancelMessage  = { type: 'match:cancel' };
 export type GameLeaveMessage    = { type: 'game:leave' };
 export type GameInputMessage    = { type: 'game:input';   payload: { matchId: number; direction: 'up' | 'down' | 'stop' } };
-export type GameStartAIMessage  = { type: 'game:startAI'; payload: { difficulty: 'easy' | 'medium' | 'hard' } };
+export type GameStartAIMessage  = { type: 'game:startAI'; payload: { difficulty: 'easy' | 'normal' | 'hard' } };
 
 export type OutgoingMessage = MatchJoinMessage | MatchCancelMessage | GameLeaveMessage | GameInputMessage | GameStartAIMessage;

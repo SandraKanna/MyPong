@@ -137,7 +137,7 @@ describe('GamePage — handleStartAI', () => {
     });
   });
 
-  it('sends game:startAI with medium by default when Play vs AI is clicked without changing difficulty', async () => {
+  it('sends game:startAI with normal by default when Play vs AI is clicked without changing difficulty', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const { screen } = await import('@testing-library/react');
     const { render } = await import('@testing-library/react');
@@ -151,7 +151,7 @@ describe('GamePage — handleStartAI', () => {
 
     expect(vi.mocked(sendWs)).toHaveBeenCalledWith({
       type: 'game:startAI',
-      payload: { difficulty: 'medium' },
+      payload: { difficulty: 'normal' },
     });
   });
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-type Difficulty = 'easy' | 'medium' | 'hard';
+type Difficulty = 'easy' | 'normal' | 'hard';
 
 interface LobbyViewProps {
   phase: 'idle' | 'queued';
@@ -14,7 +14,7 @@ interface LobbyViewProps {
 // All side effects live in GamePage and arrive via props.
 export default function LobbyView({ phase, rejectedMessage, onFindMatch, onCancel, onStartAI }: LobbyViewProps) {
   // Difficulty selection lives here: GamePage only needs the value at click time.
-  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  const [difficulty, setDifficulty] = useState<Difficulty>('normal');
 
   if (phase === 'queued') {
     return (
@@ -49,7 +49,7 @@ export default function LobbyView({ phase, rejectedMessage, onFindMatch, onCance
       <div className="flex flex-col items-center gap-4">
         <h2 className="font-display text-fg text-lg uppercase tracking-widest">Play vs AI</h2>
         <div className="flex gap-2">
-          {(['easy', 'medium', 'hard'] as const).map((d) => (
+          {(['easy', 'normal', 'hard'] as const).map((d) => (
             <button
               key={d}
               onClick={() => setDifficulty(d)}

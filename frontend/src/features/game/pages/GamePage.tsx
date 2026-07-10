@@ -77,7 +77,7 @@ export default function GamePage() {
     useGameStore.getState().cancelQueued();
   }
 
-  function handleStartAI(difficulty: 'easy' | 'medium' | 'hard') {
+  function handleStartAI(difficulty: 'easy' | 'normal' | 'hard') {
     setRejectedMessage(null);
     // game-service creates the ephemeral session and replies with match:matched,
     // which drives idle → matched directly (no setQueued step needed).

@@ -79,16 +79,16 @@ describe('LobbyView — vs AI section', () => {
   it('renders all three difficulty buttons', () => {
     render(<LobbyView phase="idle" rejectedMessage={null} onFindMatch={noop} onCancel={noop} onStartAI={noop} />);
     expect(screen.getByRole('button', { name: 'easy' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'medium' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'normal' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'hard' })).toBeDefined();
   });
 
-  it('calls onStartAI with default difficulty (medium) when Play vs AI is clicked without changing difficulty', async () => {
+  it('calls onStartAI with default difficulty (normal) when Play vs AI is clicked without changing difficulty', async () => {
     const onStartAI = vi.fn();
     const user = userEvent.setup();
     render(<LobbyView phase="idle" rejectedMessage={null} onFindMatch={noop} onCancel={noop} onStartAI={onStartAI} />);
     await user.click(screen.getByRole('button', { name: 'Play vs AI' }));
-    expect(onStartAI).toHaveBeenCalledWith('medium');
+    expect(onStartAI).toHaveBeenCalledWith('normal');
   });
 
   it('calls onStartAI with easy when easy is selected and Play vs AI is clicked', async () => {
