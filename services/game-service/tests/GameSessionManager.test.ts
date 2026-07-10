@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GameSessionManager } from '../src/session/GameSessionManager';
 import { Game } from '../src/physics/game';
+import { AI_BOT_USER_ID } from '../src/session/constants';
 import type { WsEnvelope } from '@mypong/types';
 
 function makeAssign(
@@ -581,5 +582,260 @@ describe('GameSessionManager', () => {
     const countNow = sent.length;
     vi.advanceTimersByTime(6_000);
     expect(sent.length).toBe(countNow);
+  });
+
+  // ─── PvE mode (handleStartAI) ────────────────────────────────────────────────
+
+  function makeStartAI(userId: number, difficulty: string): WsEnvelope {
+    return { type: 'game:startAI', userId, payload: { difficulty } };
+  }
+
+  it('handleStartAI creates a pending PvE session with human on left and bot on right', () => {
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+
+    manager.handleStartAI(makeStartAI(42, 'medium'));
+
+    // Session is pending (3s countdown) — not active yet.
+    expect(manager.sessionCount()).toBe(0);
+
+    vi.advanceTimersByTime(3_000);
+
+    expect(manager.sessionCount()).toBe(1);
+    const session = [...(manager as unknown as { sessions: Map<number, { players: Map<number, string>; mode: string }> }).sessions.values()][0];
+    expect(session).toBeDefined();
+    expect(session.players.get(42)).toBe('left');
+    expect(session.players.get(AI_BOT_USER_ID)).toBe('right');
+    expect(session.mode).toBe('pve');
+  });
+
+  it('handleStartAI ignores unknown difficulty values', () => {
+    manager.handleStartAI(makeStartAI(42, 'nightmare'));
+    expect(manager.sessionCount()).toBe(0);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('handleStartAI ignores envelope with missing userId', () => {
+    manager.handleStartAI({ type: 'game:startAI', payload: { difficulty: 'easy' } });
+    expect(manager.sessionCount()).toBe(0);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('handleStartAI sends match:matched to the human (not the bot) and ia-bot:sessionStart', () => {
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+
+    manager.handleStartAI(makeStartAI(42, 'hard'));
+
+    const matched = sent.find((m) => m.type === 'match:matched');
+    expect(matched).toBeDefined();
+    expect(matched!.to).toEqual([42]); // human only — bot has no socket
+    const mp = matched!.payload as { players: Record<string, string>; startsAt: string };
+    expect(mp.players[String(42)]).toBe('left');
+    expect(mp.players[String(AI_BOT_USER_ID)]).toBe('right');
+
+    const botStart = sent.find((m) => m.type === 'ia-bot:sessionStart');
+    expect(botStart).toBeDefined();
+    const bp = botStart!.payload as { difficulty: string; botSide: string };
+    expect(bp.difficulty).toBe('hard');
+    expect(bp.botSide).toBe('right');
+  });
+
+  it('handleStartAI rejects if user already has an active PvP session', () => {
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
+    sent.length = 0;
+
+    manager.handleStartAI(makeStartAI(42, 'easy'));
+
+    const rejection = sent.find((m) => m.type === 'match:rejected');
+    expect(rejection).toBeDefined();
+    expect(rejection!.to).toEqual([42]);
+    expect(manager.sessionCount()).toBe(1); // original PvP session unchanged
+  });
+
+  it('handleStartAI rejects if user already has a pending PvP session', () => {
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    const startsAt = new Date(Date.now() + 3_000).toISOString();
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }, startsAt));
+    sent.length = 0;
+
+    manager.handleStartAI(makeStartAI(42, 'easy'));
+
+    const rejection = sent.find((m) => m.type === 'match:rejected');
+    expect(rejection).toBeDefined();
+    expect(rejection!.to).toEqual([42]);
+  });
+
+  it('handleStartAI rejects if user already has an active PvE session', () => {
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    manager.handleStartAI(makeStartAI(42, 'easy'));
+    vi.advanceTimersByTime(3_000); // session becomes active
+    sent.length = 0;
+
+    manager.handleStartAI(makeStartAI(42, 'hard'));
+
+    const rejection = sent.find((m) => m.type === 'match:rejected');
+    expect(rejection).toBeDefined();
+    expect(rejection!.to).toEqual([42]);
+    expect(manager.sessionCount()).toBe(1); // original PvE session unchanged
+  });
+
+  it('PvE tick sends game:state to human only and ia-bot:state (no `to`) per tick', () => {
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    manager.handleStartAI(makeStartAI(42, 'medium'));
+    vi.advanceTimersByTime(3_000); // session starts
+    sent.length = 0;
+
+    vi.advanceTimersByTime(16); // one tick
+
+    const gameState = sent.find((m) => m.type === 'game:state');
+    expect(gameState).toBeDefined();
+    expect(gameState!.to).toEqual([42]); // human only, not AI_BOT_USER_ID
+
+    const botState = sent.find((m) => m.type === 'ia-bot:state');
+    expect(botState).toBeDefined();
+    expect(botState!.to).toBeUndefined(); // routed to ia-bot-service by type prefix
+    const bs = botState!.payload as { ball: { x: number; y: number; vx: number; vy: number } };
+    expect(typeof bs.ball.vx).toBe('number'); // velocity exposed for prediction
+    expect(typeof bs.ball.vy).toBe('number');
+  });
+
+  it('PvE game over sends ia-bot:sessionEnd and game:end to human; never sends match:result', () => {
+    manager = new GameSessionManager(
+      (msg) => sent.push(msg),
+      { gameFactory: () => new Game({ maxScore: 1 }) },
+    );
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    manager.handleStartAI(makeStartAI(42, 'easy'));
+    vi.advanceTimersByTime(3_000);
+
+    // Position ball to score on next tick (right wall exit → left scores → human wins).
+    const session = [...(manager as unknown as { sessions: Map<number, { game: Game }> }).sessions.values()][0]!;
+    session.game.ball.reset(795, 50, 10, 0);
+
+    vi.advanceTimersByTime(16);
+
+    expect(sent.find((m) => m.type === 'match:result')).toBeUndefined();
+
+    const botEnd = sent.find((m) => m.type === 'ia-bot:sessionEnd');
+    expect(botEnd).toBeDefined();
+
+    const gameEnd = sent.find((m) => m.type === 'game:end');
+    expect(gameEnd).toBeDefined();
+    expect(gameEnd!.to).toEqual([42]); // human only
+    const ep = gameEnd!.payload as { winnerId: number; reason: string };
+    expect(ep.winnerId).toBe(42); // human won
+    expect(ep.reason).toBe('completed');
+
+    expect(manager.sessionCount()).toBe(0);
+  });
+
+  it('PvE game over assigns winnerId=AI_BOT_USER_ID when bot side scores enough', () => {
+    manager = new GameSessionManager(
+      (msg) => sent.push(msg),
+      { gameFactory: () => new Game({ maxScore: 1 }) },
+    );
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    manager.handleStartAI(makeStartAI(42, 'easy'));
+    vi.advanceTimersByTime(3_000);
+
+    // Ball moves left → exits left wall → right (bot) scores.
+    // y=50 is above the left paddle (which sits at y=260–340) so no bounce occurs.
+    const session = [...(manager as unknown as { sessions: Map<number, { game: Game }> }).sessions.values()][0]!;
+    session.game.ball.reset(5, 50, -10, 0);
+
+    vi.advanceTimersByTime(16);
+
+    const gameEnd = sent.find((m) => m.type === 'game:end');
+    expect(gameEnd).toBeDefined();
+    const ep = gameEnd!.payload as { winnerId: number };
+    expect(ep.winnerId).toBe(AI_BOT_USER_ID);
+  });
+
+  it('PvE involuntary disconnect: immediate teardown, ia-bot:sessionEnd, no game:end, no match:result', () => {
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    manager.handleStartAI(makeStartAI(42, 'easy'));
+    vi.advanceTimersByTime(3_000); // session active
+    sent.length = 0;
+
+    manager.handlePlayerDisconnect(42);
+
+    expect(manager.sessionCount()).toBe(0);
+    expect(sent.find((m) => m.type === 'ia-bot:sessionEnd')).toBeDefined();
+    expect(sent.find((m) => m.type === 'game:end')).toBeUndefined(); // browser gone
+    expect(sent.find((m) => m.type === 'match:result')).toBeUndefined();
+    expect(sent.find((m) => m.type === 'game:paused')).toBeUndefined();
+  });
+
+  it('PvE voluntary leave: game:end to human with AI winnerId, ia-bot:sessionEnd, no match:result', () => {
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    manager.handleStartAI(makeStartAI(42, 'easy'));
+    vi.advanceTimersByTime(3_000);
+    sent.length = 0;
+
+    manager.handlePlayerLeave(42);
+
+    expect(manager.sessionCount()).toBe(0);
+    expect(sent.find((m) => m.type === 'match:result')).toBeUndefined();
+
+    const gameEnd = sent.find((m) => m.type === 'game:end');
+    expect(gameEnd).toBeDefined();
+    expect(gameEnd!.to).toEqual([42]);
+    const ep = gameEnd!.payload as { winnerId: number; reason: string };
+    expect(ep.winnerId).toBe(AI_BOT_USER_ID);
+    expect(ep.reason).toBe('forfeit');
+
+    expect(sent.find((m) => m.type === 'ia-bot:sessionEnd')).toBeDefined();
+  });
+
+  it('PvE disconnect during countdown: no game:paused; ia-bot:sessionEnd at startsAt, no forfeit', () => {
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    manager.handleStartAI(makeStartAI(42, 'easy'));
+    sent.length = 0;
+
+    manager.handlePlayerDisconnect(42);
+
+    expect(sent.find((m) => m.type === 'game:paused')).toBeUndefined(); // no human opponent
+
+    vi.advanceTimersByTime(3_000);
+
+    expect(manager.sessionCount()).toBe(0);
+    expect(sent.find((m) => m.type === 'ia-bot:sessionEnd')).toBeDefined();
+    expect(sent.find((m) => m.type === 'match:result')).toBeUndefined();
+    expect(sent.find((m) => m.type === 'game:end')).toBeUndefined();
+  });
+
+  it('PvE pending reconnect re-sends match:matched to human', () => {
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    manager.handleStartAI(makeStartAI(42, 'easy'));
+    manager.handlePlayerDisconnect(42);
+    sent.length = 0;
+
+    manager.handlePlayerConnect(42);
+
+    const redelivered = sent.find((m) => m.type === 'match:matched');
+    expect(redelivered).toBeDefined();
+    expect(redelivered!.to).toEqual([42]);
+  });
+
+  it('handleBotInput routes direction to the right paddle of a PvE session', () => {
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    manager.handleStartAI(makeStartAI(42, 'hard'));
+    vi.advanceTimersByTime(3_000);
+
+    const session = [...(manager as unknown as { sessions: Map<number, { game: Game; matchId?: number }> }).sessions.entries()][0]!;
+    const [matchId, sess] = session;
+    const spy = vi.spyOn(sess.game, 'setPaddleDirection');
+
+    manager.handleBotInput({ type: 'game:botInput', payload: { matchId, direction: 'up' } });
+
+    expect(spy).toHaveBeenCalledWith('right', 'up');
+  });
+
+  it('handleBotInput is a no-op on a PvP session', () => {
+    manager.handleAssign(makeAssign(1, { '42': 'left', '17': 'right' }));
+    const spy = vi.spyOn(manager.getSession(1)!.game, 'setPaddleDirection');
+
+    manager.handleBotInput({ type: 'game:botInput', payload: { matchId: 1, direction: 'up' } });
+
+    expect(spy).not.toHaveBeenCalled();
   });
 });

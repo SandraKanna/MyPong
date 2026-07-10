@@ -12,7 +12,9 @@ function main(): void {
 
   const manager = new GameSessionManager((msg) => wsClient.send(msg));
   wsClient.onMessage('game:assign',        (msg) => manager.handleAssign(msg));
+  wsClient.onMessage('game:startAI',       (msg) => manager.handleStartAI(msg));
   wsClient.onMessage('game:input',         (msg) => manager.handleInput(msg));
+  wsClient.onMessage('game:botInput',      (msg) => manager.handleBotInput(msg));
   wsClient.onMessage('game:leave',         (msg) => { if (msg.userId !== undefined) manager.handlePlayerLeave(msg.userId); });
   wsClient.onMessage('player:disconnect',  (msg) => { if (msg.userId !== undefined) manager.handlePlayerDisconnect(msg.userId); });
   wsClient.onMessage('player:connect',     (msg) => { if (msg.userId !== undefined) manager.handlePlayerConnect(msg.userId); });
