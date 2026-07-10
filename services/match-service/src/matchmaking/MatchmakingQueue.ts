@@ -10,6 +10,15 @@ export class MatchmakingQueue {
   ) {}
 
   async handleJoin(userId: number): Promise<void> {
+    if (userId < 0) {
+      this.send({
+        type:    'match:rejected',
+        to:      [userId],
+        payload: { reason: 'guest_not_allowed', message: 'Guests cannot join PvP matchmaking.' },
+      });
+      return;
+    }
+
     const active = await this.findActiveMatch(userId);
     if (active !== null) {
       this.send({
