@@ -3,13 +3,13 @@ import { BOT_PRESETS, type Difficulty } from './botConfig';
 import { predictBallY } from './ballPredictor';
 
 interface PhysicsConfig {
-  fieldWidth:   number;
-  fieldHeight:  number;
-  ballRadius:   number;
-  paddleHeight: number;
+  fieldWidth:    number;
+  fieldHeight:   number;
+  ballRadius:    number;
+  paddleHeight:  number;
   paddleXOffset: number;
-  paddleWidth:  number;
-  paddleSpeed:  number;
+  paddleWidth:   number;
+  paddleSpeed:   number;
 }
 
 interface BotSession {
@@ -46,7 +46,9 @@ interface SessionEndPayload {
   matchId: number;
 }
 
-const STOP_THRESHOLD_PX = 4; // TUNE: smaller = bot stops closer to target before coasting
+// Minimum stop precision used as the floor for both threshold calculations.
+// TUNE: smaller = bot stops closer to target before coasting (hard preset floor).
+const STOP_THRESHOLD_MIN_PX = 4;
 
 export class BotSessionManager {
   private readonly send:     (envelope: WsEnvelope) => void;
@@ -90,10 +92,6 @@ export class BotSessionManager {
     // Respect the reaction delay before making any move after session start.
     if (now - session.sessionStartMs < preset.reactionDelayMs) return;
 
-    // Throttle direction updates to updateIntervalMs.
-    if (now - session.lastEvalMs < preset.updateIntervalMs) return;
-    session.lastEvalMs = now;
-
     const { ball, paddles, matchId } = payload;
     const { cfg, botSide } = session;
 
@@ -104,37 +102,47 @@ export class BotSessionManager {
 
     const paddleY = botSide === 'right' ? paddles.rightY : paddles.leftY;
 
-    let targetY: number;
+    // ── Phase 1: aim update (gated by updateIntervalMs) ──────────────────────
+    // Recomputes where the bot is trying to go. Difficulty is expressed here:
+    // hard re-aims every 16ms, normal every 50ms, easy every 100ms.
+    if (now - session.lastEvalMs >= preset.updateIntervalMs) {
+      session.lastEvalMs = now;
 
-    const movingTowardBot = botSide === 'right' ? ball.vx > 0 : ball.vx < 0;
+      const movingTowardBot = botSide === 'right' ? ball.vx > 0 : ball.vx < 0;
 
-    if (movingTowardBot && ball.vx !== 0) {
-      // Recompute the cached target only when the ball just turned toward this bot
-      // (transition from away → toward). Holding the target stable for the full
-      // approach avoids re-rolling the random error every tick, which causes jitter.
-      if (!session.ballApproaching) {
-        const stepsToImpact    = (faceX - ball.x) / ball.vx;
-        const predicted        = predictBallY(ball.y, ball.vy, stepsToImpact, cfg.fieldHeight, cfg.ballRadius);
-        const error            = (Math.random() * 2 - 1) * preset.trackingErrorPx;
-        session.cachedTargetY  = predicted + error;
-        session.ballApproaching = true;
+      if (movingTowardBot && ball.vx !== 0) {
+        // Cache the target once on the away→toward transition. Holding it stable
+        // for the whole approach prevents re-rolling the random error every tick,
+        // which would cause visible jitter.
+        if (!session.ballApproaching) {
+          const stepsToImpact    = (faceX - ball.x) / ball.vx;
+          const predicted        = predictBallY(ball.y, ball.vy, stepsToImpact, cfg.fieldHeight, cfg.ballRadius);
+          const error            = (Math.random() * 2 - 1) * preset.trackingErrorPx;
+          session.cachedTargetY  = predicted + error;
+          session.ballApproaching = true;
+        }
+      } else {
+        // Ball moving away — clear the cache and drift toward field center.
+        session.cachedTargetY   = null;
+        session.ballApproaching = false;
       }
-      targetY = session.cachedTargetY!;
-    } else {
-      // Ball moving away — clear the cache and drift toward field center.
-      session.cachedTargetY   = null;
-      session.ballApproaching = false;
-      targetY = cfg.fieldHeight / 2;
     }
 
-    // Move so paddle center reaches targetY.
-    const paddleCenterY   = paddleY + cfg.paddleHeight / 2;
-    const distanceToTarget = targetY - paddleCenterY;
+    // ── Phase 2: direction correction (runs every call) ───────────────────────
+    // Pure servo: move toward whatever target Phase 1 last set. Runs every physics
+    // tick so the paddle converges within one tick of entering the stop zone,
+    // preventing oscillation regardless of how infrequently Phase 1 fires.
+    const targetY       = session.cachedTargetY ?? cfg.fieldHeight / 2;
+    const paddleCenterY = paddleY + cfg.paddleHeight / 2;
+    const distance      = targetY - paddleCenterY;
+    // TUNE: max(4, paddleSpeed) = 5px — paddle stops when center is within one
+    // tick's travel of the target, preventing single-tick overshoot oscillation.
+    const stopThreshold = Math.max(STOP_THRESHOLD_MIN_PX, cfg.paddleSpeed);
 
     let dir: 'up' | 'down' | 'stop';
-    if (Math.abs(distanceToTarget) < STOP_THRESHOLD_PX) {
+    if (Math.abs(distance) < stopThreshold) {
       dir = 'stop';
-    } else if (distanceToTarget < 0) {
+    } else if (distance < 0) {
       dir = 'up';
     } else {
       dir = 'down';
