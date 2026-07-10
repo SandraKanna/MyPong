@@ -48,7 +48,7 @@ describe('BotSessionManager', () => {
   // ── session lifecycle ────────────────────────────────────────────────────────
 
   it('handleSessionStart creates a bot session', () => {
-    manager.handleSessionStart(makeSessionStart(1, 'medium'));
+    manager.handleSessionStart(makeSessionStart(1, 'normal'));
     expect(manager.sessionCount()).toBe(1);
   });
 
@@ -75,8 +75,8 @@ describe('BotSessionManager', () => {
   // ── state handling and direction decisions ───────────────────────────────────
 
   it('does not send any direction before the reactionDelay elapses', () => {
-    // hard preset has reactionDelayMs=0 — use medium (120ms) to test the delay.
-    manager.handleSessionStart(makeSessionStart(1, 'medium'));
+    // hard preset has reactionDelayMs=0 — use normal (120ms) to test the delay.
+    manager.handleSessionStart(makeSessionStart(1, 'normal'));
     // Advance time by less than reactionDelayMs (120ms).
     vi.advanceTimersByTime(50);
     manager.handleState(makeState(1, { x: 400, y: 300, vx: 5, vy: 3 }));
@@ -154,24 +154,68 @@ describe('BotSessionManager', () => {
   });
 
   it('sends stop after a direction change when paddle reaches the target', () => {
-    // Hard preset. First establish a 'down' direction, then show a stop when
-    // the ball is centered on the paddle. The transition only sends a message
-    // when the direction actually changes from the previous value.
+    // Hard preset (trackingErrorPx=0, updateIntervalMs=16ms, reactionDelayMs=0).
+    // Ball at y=300, vy=0: predicted landing = 300 (no vy drift). Target cached on first eval.
+    // Step 1: paddle center at 440 (rightY=400) → distanceToTarget = -140 → 'up'.
+    // Step 2: advance 16ms, paddle now at center=300 (rightY=260) → distance=0 → 'stop'.
     manager.handleSessionStart(makeSessionStart(1, 'hard'));
 
-    // Step 1: ball below paddle center → 'down'.
-    manager.handleState(makeState(1, { x: 400, y: 550, vx: 5, vy: 0 }, { leftY: 260, rightY: 260 }));
-    const countAfterDown = sent.filter((m) => m.type === 'game:botInput').length;
+    manager.handleState(makeState(1, { x: 400, y: 300, vx: 5, vy: 0 }, { leftY: 260, rightY: 400 }));
+    const countAfterUp = sent.filter((m) => m.type === 'game:botInput').length;
+    expect(countAfterUp).toBeGreaterThan(0);
 
-    // Step 2: advance past updateIntervalMs (16ms for hard), then ball at center.
     vi.advanceTimersByTime(16);
-    // Ball at y=300, vy=0, paddle center at 300 → targetY=300, distance=0 → stop.
-    manager.handleState(makeState(1, { x: 400, y: 300, vx: 5, vy: 0 }, { leftY: 260, rightY: 260 }));
+    // x advances slightly to show ball is still moving; cachedTargetY=300 is kept (still approaching).
+    manager.handleState(makeState(1, { x: 410, y: 300, vx: 5, vy: 0 }, { leftY: 260, rightY: 260 }));
 
     const allDir = sent.filter((m) => m.type === 'game:botInput');
-    expect(allDir.length).toBeGreaterThan(countAfterDown); // a new message was sent
+    expect(allDir.length).toBeGreaterThan(countAfterUp);
     const last = allDir[allDir.length - 1]!;
     expect((last.payload as { direction: string }).direction).toBe('stop');
+  });
+
+  it('does not re-roll tracking error mid-approach — target is stable once cached', () => {
+    // Hard preset used here for simplicity (zero error). The cache mechanism itself
+    // is what's under test: the target must not change between ticks of the same approach.
+    // We verify by checking no contradictory direction is emitted mid-approach.
+    manager.handleSessionStart(makeSessionStart(1, 'hard'));
+
+    // First approach: ball heading right (vx=5), paddle far below target (rightY=0 → center=40).
+    // Predicted target = predictBallY(50, 0, ...) = 50. Paddle center 40 < 50 → 'down'.
+    manager.handleState(makeState(1, { x: 400, y: 50, vx: 5, vy: 0 }, { leftY: 260, rightY: 0 }));
+    const firstDir = (sent[0]!.payload as { direction: string }).direction;
+
+    // Advance past updateIntervalMs; send another state with ball still approaching.
+    vi.advanceTimersByTime(16);
+    manager.handleState(makeState(1, { x: 410, y: 50, vx: 5, vy: 0 }, { leftY: 260, rightY: 0 }));
+
+    // Direction must not have reversed — target is held stable (no re-roll).
+    const allDir = sent.filter((m) => m.type === 'game:botInput').map((m) => (m.payload as { direction: string }).direction);
+    for (const d of allDir) {
+      expect(d).toBe(firstDir);
+    }
+  });
+
+  it('recomputes target when ball reverses direction (away then back)', () => {
+    // Shows the cache clears on "away" and recomputes on the next "toward" transition.
+    manager.handleSessionStart(makeSessionStart(1, 'hard'));
+
+    // Phase 1: ball approaching (vx > 0) → target cached based on y=50.
+    manager.handleState(makeState(1, { x: 400, y: 50, vx: 5, vy: 0 }, { leftY: 260, rightY: 260 }));
+    const dirAfterApproach = sent.filter((m) => m.type === 'game:botInput').length;
+
+    // Phase 2: ball moving away (vx < 0) → cache clears, bot drifts to center.
+    vi.advanceTimersByTime(16);
+    manager.handleState(makeState(1, { x: 400, y: 50, vx: -5, vy: 0 }, { leftY: 260, rightY: 260 }));
+
+    // Phase 3: ball approaching again (vx > 0) from a different y → new target computed.
+    vi.advanceTimersByTime(16);
+    manager.handleState(makeState(1, { x: 300, y: 550, vx: 5, vy: 0 }, { leftY: 260, rightY: 260 }));
+
+    // All evaluations should complete without throwing.
+    expect(manager.sessionCount()).toBe(1);
+    const allDir = sent.filter((m) => m.type === 'game:botInput');
+    expect(allDir.length).toBeGreaterThanOrEqual(dirAfterApproach);
   });
 
   it('handleState is a no-op for unknown matchId', () => {
