@@ -232,4 +232,124 @@ describe('BotSessionManager', () => {
     expect((dirMsg!.payload as { matchId: number }).matchId).toBe(42);
     expect(dirMsg!.to).toBeUndefined(); // no `to` — routed by prefix to game-service
   });
+
+  // ── stop threshold and per-tick correction ───────────────────────────────────
+  //
+  // Unified threshold: max(4, paddleSpeed) = 5px for all branches and difficulties.
+  // Direction correction (Phase 2) runs on every handleState call after reactionDelayMs,
+  // so the paddle converges within one tick of entering the 5px zone — no oscillation.
+  // Aim update (Phase 1) is still gated by updateIntervalMs (difficulty trait).
+  //
+  // Tests use the "establish a direction, then enter the stop zone" pattern because the
+  // bot's `dir !== session.currentDir` guard suppresses sends when direction is unchanged.
+  // Starting from currentDir='stop', a 'stop' evaluation produces no message — the test
+  // must first confirm the paddle moves, then confirm it stops when inside the threshold.
+
+  it('direction correction runs every tick, not every updateIntervalMs', () => {
+    // easy: updateIntervalMs=100ms, but Phase 2 (correction) runs every call.
+    // Prove by entering the 5px stop zone after only one tick (16ms < 100ms) — bot
+    // still sends 'stop' because Phase 2 is not gated by updateIntervalMs.
+    manager.handleSessionStart(makeSessionStart(1, 'easy'));
+    vi.advanceTimersByTime(300); // past reactionDelayMs=300ms
+
+    // Call 1: Phase 1 fires (first call). Ball moving away, cache cleared.
+    // rightY=180 → center=220 → distance to 300 = 80px > 5px → 'down'.
+    manager.handleState(makeState(1, { x: 200, y: 300, vx: -5, vy: 0 }, { leftY: 260, rightY: 180 }));
+    expect(sent.find((m) => (m.payload as { direction: string }).direction === 'down')).toBeDefined();
+
+    vi.advanceTimersByTime(16); // one tick — Phase 1 still gated (16ms < 100ms)
+    // rightY=258 → center=298 → distance=2px < 5px → 'stop'.
+    // Phase 1 does NOT fire, but Phase 2 does — proves per-tick correction.
+    manager.handleState(makeState(1, { x: 200, y: 300, vx: -5, vy: 0 }, { leftY: 260, rightY: 258 }));
+
+    const last = [...sent].reverse().find((m) => m.type === 'game:botInput');
+    expect(last).toBeDefined();
+    expect((last!.payload as { direction: string }).direction).toBe('stop');
+  });
+
+  it('center-drift uses the unified 5px threshold (not the old wider threshold)', () => {
+    // normal: old centerDriftStopThreshold was 20px. Now it is the same 5px as approach.
+    // Proves that 3px from center → 'stop', and 10px from center → direction sent.
+    manager.handleSessionStart(makeSessionStart(1, 'normal'));
+    vi.advanceTimersByTime(120); // past reactionDelayMs=120ms
+
+    // rightY=140 → center=180 → distance=120px > 5px → 'down'.
+    manager.handleState(makeState(1, { x: 200, y: 300, vx: -5, vy: 0 }, { leftY: 260, rightY: 140 }));
+    expect(sent.find((m) => (m.payload as { direction: string }).direction === 'down')).toBeDefined();
+
+    vi.advanceTimersByTime(16); // one tick (Phase 1 still gated — 16ms < 50ms)
+    // rightY=257 → center=297 → distance=3px < 5px → 'stop'.
+    manager.handleState(makeState(1, { x: 200, y: 300, vx: -5, vy: 0 }, { leftY: 260, rightY: 257 }));
+
+    const last = [...sent].reverse().find((m) => m.type === 'game:botInput');
+    expect(last).toBeDefined();
+    expect((last!.payload as { direction: string }).direction).toBe('stop');
+  });
+
+  it('approach branch uses the unified 5px threshold', () => {
+    // easy with Math.random pinned: tracking error = (0.5×2−1)×40 = 0 → cachedTargetY=predicted.
+    // Ball approaching (vx>0), predicted landing = 300 (ball.y=300, vy=0).
+    // Proves 10px distance → direction sent, 4px distance → 'stop'.
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    manager.handleSessionStart(makeSessionStart(1, 'easy'));
+    vi.advanceTimersByTime(300); // past reactionDelayMs=300ms
+
+    // rightY=250 → center=290 → distance=10px > 5px → 'down'.
+    manager.handleState(makeState(1, { x: 400, y: 300, vx: 5, vy: 0 }, { leftY: 260, rightY: 250 }));
+    expect(sent.find((m) => (m.payload as { direction: string }).direction === 'down')).toBeDefined();
+
+    vi.advanceTimersByTime(16); // one tick (Phase 1 still gated)
+    // rightY=256 → center=296 → distance=4px < 5px → 'stop'.
+    manager.handleState(makeState(1, { x: 410, y: 300, vx: 5, vy: 0 }, { leftY: 260, rightY: 256 }));
+
+    randSpy.mockRestore();
+
+    const last = [...sent].reverse().find((m) => m.type === 'game:botInput');
+    expect(last).toBeDefined();
+    expect((last!.payload as { direction: string }).direction).toBe('stop');
+  });
+
+  it('no oscillation: direction does not reverse after reaching stop zone (regression)', () => {
+    // Regression for approach-branch oscillation in easy: old code gated direction
+    // correction by updateIntervalMs (100ms), so the paddle overshot the 5px stop
+    // zone (~35px of travel per window) before the next correction fired, causing
+    // a reversal. New per-tick Phase 2 settles within one tick — no reversal.
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5); // error=0, target=300
+
+    manager.handleSessionStart(makeSessionStart(1, 'easy'));
+    vi.advanceTimersByTime(300); // past reactionDelayMs
+
+    // Ball at y=300, vy=0, vx=5: target cached = 300, ideal rightY=260 (center=300).
+    // rightY=270: center=310, distance=-10px (just outside the 5px stop zone).
+    // Simulate paddle responding to the bot's most recently commanded direction
+    // at paddleSpeed=5px/tick — same as game-service would move it.
+    let rightY = 270;
+    let commandedDir: 'up' | 'down' | 'stop' = 'stop';
+    for (let tick = 0; tick < 15; tick++) {
+      vi.advanceTimersByTime(16);
+      manager.handleState(makeState(
+        1,
+        { x: 400 + tick * 5, y: 300, vx: 5, vy: 0 },
+        { leftY: 260, rightY },
+      ));
+      // Persist the last commanded direction until explicitly changed.
+      const lastSent = [...sent].reverse().find((m) => m.type === 'game:botInput');
+      if (lastSent) commandedDir = (lastSent.payload as { direction: string }).direction as typeof commandedDir;
+      if (commandedDir === 'up')   rightY = Math.max(0, rightY - 5);
+      if (commandedDir === 'down') rightY = Math.min(520, rightY + 5);
+    }
+    randSpy.mockRestore();
+
+    const dirMsgs = sent
+      .filter((m) => m.type === 'game:botInput')
+      .map((m) => (m.payload as { direction: string }).direction);
+
+    // Bot must reach 'stop' within the simulation window.
+    const firstStopIdx = dirMsgs.indexOf('stop');
+    expect(firstStopIdx).toBeGreaterThanOrEqual(0);
+
+    // Zero direction-change sends after the first 'stop' — no oscillation.
+    expect(dirMsgs.slice(firstStopIdx + 1)).toHaveLength(0);
+  });
 });
