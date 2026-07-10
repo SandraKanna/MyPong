@@ -15,6 +15,7 @@ const PUBLIC_ROUTES: ReadonlyArray<string> = [
   '/api/auth/login',
   '/api/auth/refresh',
   '/api/auth/session', // logout — access token may be expired; auth-service validates refresh token
+  '/api/auth/guest',
 ];
 
 const plugin: FastifyPluginCallback = (fastify, _opts, done) => {

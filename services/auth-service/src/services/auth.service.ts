@@ -1,6 +1,6 @@
 import argon2 from 'argon2';
 import jwt from 'jsonwebtoken';
-import { randomUUID } from 'crypto';
+import { randomUUID, randomInt } from 'crypto';
 import { db } from '../db';
 import { config } from '../config';
 
@@ -47,6 +47,15 @@ export function generateRefreshToken(userId: number): { token: string; jti: stri
     { expiresIn: '7d' }
   );
   return { token, jti };
+}
+
+export function generateGuestToken(): string {
+  const guestId = -(randomInt(1, 2 ** 31));
+  return jwt.sign(
+    { sub: String(guestId), type: 'guest' },
+    config.JWT_SECRET,
+    { expiresIn: '15m' }
+  );
 }
 
 export function verifyAccessToken(token: string): { userId: number } {

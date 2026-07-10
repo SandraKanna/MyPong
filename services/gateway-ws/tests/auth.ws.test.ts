@@ -100,6 +100,29 @@ describe('gateway-ws — WebSocket auth', () => {
     });
   });
 
+  it('accepts a guest token and sends a connected message with the negative userId', async () => {
+    const guestToken = jwt.sign(
+      { sub: '-12345', type: 'guest' },
+      TEST_SECRET,
+      { algorithm: 'HS256', expiresIn: '15m' },
+    );
+
+    const ws = connect(port);
+    const closePromise = onceClose(ws);
+    await onceOpen(ws);
+
+    ws.send(JSON.stringify({ type: 'auth', payload: { token: guestToken } }));
+
+    const raw = await onceMessage(ws);
+    ws.close();
+    await closePromise;
+
+    expect(JSON.parse(raw)).toMatchObject({
+      type: 'connected',
+      payload: { userId: '-12345' },
+    });
+  });
+
   it('rejects a refresh token used in place of an access token (close 4001)', async () => {
     const refreshToken = jwt.sign(
       { sub: '42', type: 'refresh' },

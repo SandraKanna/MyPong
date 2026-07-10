@@ -41,6 +41,15 @@ No body; reads refresh token from cookie.
 Response `200`: `{ accessToken: string }`. Rotates the refresh cookie.
 Response `401`: missing cookie, invalid/expired token, and already-revoked token all return the same status with a generic message — the client cannot distinguish which case fired, by design.
 
+### POST /api/auth/guest
+
+No body required.
+Response `200`: `{ accessToken: string }` — same shape as login's response.
+
+Token payload: `{ sub: "<negative integer>", type: "guest", exp: <now + 15 minutes> }`, signed with `JWT_SECRET`. The `sub` value is a randomly generated negative integer — guaranteed collision-free with real user IDs (Postgres serials start at 1, always positive) and with `AI_BOT_USER_ID` (exactly `0`). No refresh token, no `Set-Cookie` header, no DB write of any kind.
+
+A guest token is accepted by gateway-ws for opening a WebSocket connection (for PvE play). It is rejected by gateway-api's JWT middleware on every REST endpoint — a guest cannot call any authenticated REST route.
+
 ### DELETE /api/auth/session (logout)
 
 No body; reads refresh token from cookie to revoke it if present.

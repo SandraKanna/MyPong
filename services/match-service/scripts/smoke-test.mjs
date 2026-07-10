@@ -112,6 +112,13 @@ async function getAccessToken(label) {
   return accessToken;
 }
 
+async function getGuestToken() {
+  const res = await fetch(`${API_URL}/api/auth/guest`, { method: 'POST' });
+  if (!res.ok) throw new Error(`guest token failed: ${res.status}`);
+  const { accessToken } = await res.json();
+  return accessToken;
+}
+
 // Connects a browser to gateway-ws, authenticates, and returns { ws, userId }.
 async function connectBrowser(token) {
   const ws  = await wsConnect(WS_URL);
@@ -252,8 +259,62 @@ async function main() {
       pass('match:rejected — browser1 was not re-enqueued (no match:matched after rejection)');
     }
 
+    // ── Tests 5-6: guest match:join rejection ─────────────────────────────────
+    let guestBrowser1, guestBrowser2;
+    try {
+      const [gt1, gt2] = await Promise.all([getGuestToken(), getGuestToken()]);
+      guestBrowser1 = await connectBrowser(gt1);
+      sockets.push(guestBrowser1.ws);
+      guestBrowser2 = await connectBrowser(gt2);
+      sockets.push(guestBrowser2.ws);
+    } catch (err) {
+      fail('guest browsers connect', err.message);
+      process.exit(1);
+    }
+
+    // Test 5: single guest match:join → match:rejected with reason guest_not_allowed.
+    const guestRejected = wsNextMatching(
+      guestBrowser1.ws,
+      (m) => m.type === 'match:rejected',
+      3000,
+    );
+    guestBrowser1.ws.send(JSON.stringify({ type: 'match:join' }));
+
+    try {
+      const rejected = await withTimeout(guestRejected, 3000);
+      const rp = rejected.payload;
+      if (rp?.reason === 'guest_not_allowed' && typeof rp?.message === 'string') {
+        pass(`guest match:join → match:rejected (reason: ${rp.reason})`);
+      } else {
+        fail('guest match:rejected shape invalid', JSON.stringify(rejected));
+      }
+    } catch (err) {
+      fail('guest match:join → match:rejected not received within 3s', err.message);
+    }
+
+    // Test 6: two guests joining back-to-back never produce match:matched.
+    // Both are rejected before entering the queue, so pairing is impossible.
+    const guestMatched1 = wsNextMatching(guestBrowser1.ws, (m) => m.type === 'match:matched', 500);
+    const guestMatched2 = wsNextMatching(guestBrowser2.ws, (m) => m.type === 'match:matched', 500);
+
+    guestBrowser2.ws.send(JSON.stringify({ type: 'match:join' }));
+
+    let guestsPaired = false;
+    try {
+      await Promise.race([guestMatched1, guestMatched2]);
+      guestsPaired = true;
+    } catch {
+      // Expected: both promises time out — no match:matched arrived.
+    }
+
+    if (guestsPaired) {
+      fail('two guests joined and were paired — guest guard is not working');
+    } else {
+      pass('two guests joining back-to-back never produce match:matched (correct)');
+    }
+
   } finally {
-    // ── Test 5: clean shutdown ─────────────────────────────────────────────────
+    // ── Test 7: clean shutdown ─────────────────────────────────────────────────
     const closePromises = sockets.map((ws) => {
       const p = wsClose(ws);
       ws.close(1000);

@@ -28,6 +28,9 @@ describe('authPlugin — JWT middleware', () => {
     app.get('/health', async () => ({ status: 'ok' }));
     app.post('/api/auth/login', async () => ({ ok: true }));
 
+    // Public auth routes
+    app.post('/api/auth/guest', async () => ({ ok: true }));
+
     // Protected route — preHandler hook applies because it is NOT in PUBLIC_ROUTES
     app.get('/api/users/me', async (request) => ({ userId: request.userId }));
   });
@@ -110,6 +113,23 @@ describe('authPlugin — JWT middleware', () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(401);
+  });
+
+  it('returns 401 when a guest token is used on a protected route', async () => {
+    const token = jwt.sign({ sub: '-42', type: 'guest' }, JWT_SECRET, {
+      algorithm: 'HS256',
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/users/me',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('passes POST /api/auth/guest without Authorization header', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/auth/guest' });
+    expect(res.statusCode).toBe(200);
   });
 
   // ── Valid token ─────────────────────────────────────────────────────────────

@@ -143,8 +143,8 @@ export function buildServer(opts: BuildServerOptions = {}): ServerInstance {
           const result = jwt.verify(msg.payload.token, config.JWT_SECRET, {
             algorithms: ['HS256'],
           });
-          // Defense-in-depth: reject refresh tokens even if both secrets coincide.
-          if (typeof result === 'string' || result['type'] !== 'access') {
+          // Defense-in-depth: only 'access' and 'guest' tokens open a WS connection.
+          if (typeof result === 'string' || (result['type'] !== 'access' && result['type'] !== 'guest')) {
             socket.close(CLOSE_UNAUTHORIZED, 'Unauthorized');
             return;
           }

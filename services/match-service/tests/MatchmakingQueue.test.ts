@@ -110,6 +110,18 @@ describe('MatchmakingQueue', () => {
 
   // ─── match:rejected ──────────────────────────────────────────────────────────
 
+  it('rejects a guest (negative userId) with guest_not_allowed before any DB lookup', async () => {
+    await queue.handleJoin(-42);
+
+    expect(sent).toHaveLength(1);
+    const rejected = sent[0] as { type: string; to: number[]; payload: { reason: string } };
+    expect(rejected.type).toBe('match:rejected');
+    expect(rejected.to).toEqual([-42]);
+    expect(rejected.payload.reason).toBe('guest_not_allowed');
+    expect(queue.queueLength()).toBe(0);
+    expect(findActiveMatch).not.toHaveBeenCalled();
+  });
+
   it('sends match:rejected and does not enqueue when an active match exists for the userId', async () => {
     findActiveMatch.mockResolvedValueOnce(makeMatch(5, 42, 99));
 
