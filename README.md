@@ -82,7 +82,7 @@ The frontend (including Public Edge/nginx) runs as a separate job: **lint → ty
 | Phase 2 | user-service + frontend profile + avatar upload (Done)
 | Phase 3 | gateway-ws hub + game-service (physics, session lifecycle, pause/reconnect) + match-service (matchmaking, match lifecycle, stats/history recording) (Done)
 | Phase 4 | Full game frontend: lobby, 3s countdown, live board, pause overlay, result screen (Done)
-| Phase 5 | ia-bot-service + guest mode (Pending)
+| Phase 5 | ai-bot-service + guest mode (Pending)
 | Phase 6 | tournament-service + frontend brackets (Pending)
 | Phase 7 | Unit test coverage review across all services (Pending)
 | Phase 8 | Full CI and basic CD + final README (Pending)

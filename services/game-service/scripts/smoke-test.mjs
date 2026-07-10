@@ -416,11 +416,11 @@ async function main() {
 
     pveBrowser.ws.removeListener('message', pveStateCollector);
 
-    // Test 11: bot paddle actually moved — confirms ia-bot-service received
-    // ia-bot:state frames, ran its prediction logic, and sent game:botInput
+    // Test 11: bot paddle actually moved — confirms ai-bot-service received
+    // ai-bot:state frames, ran its prediction logic, and sent game:botInput
     // back through gateway-ws to game-service, which applied it to the physics.
     if (pveFrames.length === 0) {
-      fail('PvE — no game:state frames received after countdown (ia-bot-service alive?)');
+      fail('PvE — no game:state frames received after countdown (ai-bot-service alive?)');
     } else {
       const firstRightY = pveFrames[0].payload.paddles.rightY;
       const botMoved    = pveFrames.some((f) => f.payload.paddles.rightY !== firstRightY);
@@ -428,7 +428,7 @@ async function main() {
         const lastRightY = pveFrames[pveFrames.length - 1].payload.paddles.rightY;
         pass(`PvE — AI paddle moved (${firstRightY} → ${lastRightY} over ${pveFrames.length} frames)`);
       } else {
-        fail(`PvE — AI paddle static across ${pveFrames.length} frames — is ia-bot-service connected to gateway-ws?`);
+        fail(`PvE — AI paddle static across ${pveFrames.length} frames — is ai-bot-service connected to gateway-ws?`);
       }
     }
 

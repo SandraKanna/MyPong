@@ -620,7 +620,7 @@ describe('GameSessionManager', () => {
     expect(sent).toHaveLength(0);
   });
 
-  it('handleStartAI sends match:matched to the human (not the bot) and ia-bot:sessionStart', () => {
+  it('handleStartAI sends match:matched to the human (not the bot) and ai-bot:sessionStart', () => {
     vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
 
     manager.handleStartAI(makeStartAI(42, 'hard'));
@@ -632,7 +632,7 @@ describe('GameSessionManager', () => {
     expect(mp.players[String(42)]).toBe('left');
     expect(mp.players[String(AI_BOT_USER_ID)]).toBe('right');
 
-    const botStart = sent.find((m) => m.type === 'ia-bot:sessionStart');
+    const botStart = sent.find((m) => m.type === 'ai-bot:sessionStart');
     expect(botStart).toBeDefined();
     const bp = botStart!.payload as { difficulty: string; botSide: string };
     expect(bp.difficulty).toBe('hard');
@@ -678,7 +678,7 @@ describe('GameSessionManager', () => {
     expect(manager.sessionCount()).toBe(1); // original PvE session unchanged
   });
 
-  it('PvE tick sends game:state to human only and ia-bot:state (no `to`) per tick', () => {
+  it('PvE tick sends game:state to human only and ai-bot:state (no `to`) per tick', () => {
     vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
     manager.handleStartAI(makeStartAI(42, 'medium'));
     vi.advanceTimersByTime(3_000); // session starts
@@ -690,15 +690,15 @@ describe('GameSessionManager', () => {
     expect(gameState).toBeDefined();
     expect(gameState!.to).toEqual([42]); // human only, not AI_BOT_USER_ID
 
-    const botState = sent.find((m) => m.type === 'ia-bot:state');
+    const botState = sent.find((m) => m.type === 'ai-bot:state');
     expect(botState).toBeDefined();
-    expect(botState!.to).toBeUndefined(); // routed to ia-bot-service by type prefix
+    expect(botState!.to).toBeUndefined(); // routed to ai-bot-service by type prefix
     const bs = botState!.payload as { ball: { x: number; y: number; vx: number; vy: number } };
     expect(typeof bs.ball.vx).toBe('number'); // velocity exposed for prediction
     expect(typeof bs.ball.vy).toBe('number');
   });
 
-  it('PvE game over sends ia-bot:sessionEnd and game:end to human; never sends match:result', () => {
+  it('PvE game over sends ai-bot:sessionEnd and game:end to human; never sends match:result', () => {
     manager = new GameSessionManager(
       (msg) => sent.push(msg),
       { gameFactory: () => new Game({ maxScore: 1 }) },
@@ -715,7 +715,7 @@ describe('GameSessionManager', () => {
 
     expect(sent.find((m) => m.type === 'match:result')).toBeUndefined();
 
-    const botEnd = sent.find((m) => m.type === 'ia-bot:sessionEnd');
+    const botEnd = sent.find((m) => m.type === 'ai-bot:sessionEnd');
     expect(botEnd).toBeDefined();
 
     const gameEnd = sent.find((m) => m.type === 'game:end');
@@ -750,7 +750,7 @@ describe('GameSessionManager', () => {
     expect(ep.winnerId).toBe(AI_BOT_USER_ID);
   });
 
-  it('PvE involuntary disconnect: immediate teardown, ia-bot:sessionEnd, no game:end, no match:result', () => {
+  it('PvE involuntary disconnect: immediate teardown, ai-bot:sessionEnd, no game:end, no match:result', () => {
     vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
     manager.handleStartAI(makeStartAI(42, 'easy'));
     vi.advanceTimersByTime(3_000); // session active
@@ -759,13 +759,13 @@ describe('GameSessionManager', () => {
     manager.handlePlayerDisconnect(42);
 
     expect(manager.sessionCount()).toBe(0);
-    expect(sent.find((m) => m.type === 'ia-bot:sessionEnd')).toBeDefined();
+    expect(sent.find((m) => m.type === 'ai-bot:sessionEnd')).toBeDefined();
     expect(sent.find((m) => m.type === 'game:end')).toBeUndefined(); // browser gone
     expect(sent.find((m) => m.type === 'match:result')).toBeUndefined();
     expect(sent.find((m) => m.type === 'game:paused')).toBeUndefined();
   });
 
-  it('PvE voluntary leave: game:end to human with AI winnerId, ia-bot:sessionEnd, no match:result', () => {
+  it('PvE voluntary leave: game:end to human with AI winnerId, ai-bot:sessionEnd, no match:result', () => {
     vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
     manager.handleStartAI(makeStartAI(42, 'easy'));
     vi.advanceTimersByTime(3_000);
@@ -783,10 +783,10 @@ describe('GameSessionManager', () => {
     expect(ep.winnerId).toBe(AI_BOT_USER_ID);
     expect(ep.reason).toBe('forfeit');
 
-    expect(sent.find((m) => m.type === 'ia-bot:sessionEnd')).toBeDefined();
+    expect(sent.find((m) => m.type === 'ai-bot:sessionEnd')).toBeDefined();
   });
 
-  it('PvE disconnect during countdown: no game:paused; ia-bot:sessionEnd at startsAt, no forfeit', () => {
+  it('PvE disconnect during countdown: no game:paused; ai-bot:sessionEnd at startsAt, no forfeit', () => {
     vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
     manager.handleStartAI(makeStartAI(42, 'easy'));
     sent.length = 0;
@@ -798,7 +798,7 @@ describe('GameSessionManager', () => {
     vi.advanceTimersByTime(3_000);
 
     expect(manager.sessionCount()).toBe(0);
-    expect(sent.find((m) => m.type === 'ia-bot:sessionEnd')).toBeDefined();
+    expect(sent.find((m) => m.type === 'ai-bot:sessionEnd')).toBeDefined();
     expect(sent.find((m) => m.type === 'match:result')).toBeUndefined();
     expect(sent.find((m) => m.type === 'game:end')).toBeUndefined();
   });

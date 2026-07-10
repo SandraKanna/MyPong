@@ -1,6 +1,6 @@
 name: mypong
 
-# tournament-service and ia-bot-service below have no Dockerfile yet
+# tournament-service and ai-bot-service below have no Dockerfile yet
 # (Fases 5-6) — they're scaffolding for future phases and are intentionally excluded 
 # from the Makefile's SERVICES list, so `make up` never tries to build them.
 
@@ -198,10 +198,10 @@ services:
       - postgres
     # TODO: healthcheck
 
-  ia-bot-service:
+  ai-bot-service:
     build:
       context: .
-      dockerfile: services/ia-bot-service/Dockerfile
+      dockerfile: services/ai-bot-service/Dockerfile
     environment:
       GATEWAY_WS_URL:          ws://gateway-ws:4500
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}

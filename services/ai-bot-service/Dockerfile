@@ -1,12 +1,12 @@
 FROM node:24-alpine AS builder
-WORKDIR /app/services/ia-bot-service
+WORKDIR /app/services/ai-bot-service
 
-COPY services/ia-bot-service/package*.json ./
+COPY services/ai-bot-service/package*.json ./
 RUN npm ci
 
 COPY shared/types/ /app/shared/types/
 COPY tsconfig.base.json /app/tsconfig.base.json
-COPY services/ia-bot-service/ ./
+COPY services/ai-bot-service/ ./
 
 RUN npm run build
 
@@ -16,8 +16,8 @@ WORKDIR /app
 
 RUN mkdir -p /tmp && chown -R node:node /tmp
 
-COPY --from=builder /app/services/ia-bot-service/dist/ ./dist/
-COPY --from=builder /app/services/ia-bot-service/node_modules/ ./node_modules/
+COPY --from=builder /app/services/ai-bot-service/dist/ ./dist/
+COPY --from=builder /app/services/ai-bot-service/node_modules/ ./node_modules/
 
 USER node
 

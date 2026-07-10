@@ -174,7 +174,7 @@ export class GameSessionManager {
     // match:matched reuses the existing 3-second countdown frontend flow.
     this.send({ type: 'match:matched', to: [userId], payload: { matchId, players: Object.fromEntries(players), startsAt } });
     // Notify the bot service so it can prepare its session state.
-    this.send({ type: 'ia-bot:sessionStart', payload: { matchId, difficulty, botSide: 'right', physicsConfig: DEFAULT_PHYSICS_CONFIG } });
+    this.send({ type: 'ai-bot:sessionStart', payload: { matchId, difficulty, botSide: 'right', physicsConfig: DEFAULT_PHYSICS_CONFIG } });
 
     const delay = Math.max(0, new Date(startsAt).getTime() - Date.now());
 
@@ -183,7 +183,7 @@ export class GameSessionManager {
 
       if (pendingEntry.disconnectedUserId !== undefined) {
         // Human disconnected during the countdown — cancel without a DB record.
-        this.send({ type: 'ia-bot:sessionEnd', payload: { matchId } });
+        this.send({ type: 'ai-bot:sessionEnd', payload: { matchId } });
         return;
       }
 
@@ -196,8 +196,8 @@ export class GameSessionManager {
 
         // game:state to the human player (to:[userId] — AI_BOT_USER_ID has no socket).
         this.send({ type: 'game:state', to: [userId], payload: { matchId, ...state } });
-        // ia-bot:state includes velocity so the bot can predict ball trajectory.
-        this.send({ type: 'ia-bot:state', payload: { matchId, ball: { x: game.ball.x, y: game.ball.y, vx: game.ball.vx, vy: game.ball.vy }, paddles: state.paddles, score: state.score } });
+        // ai-bot:state includes velocity so the bot can predict ball trajectory.
+        this.send({ type: 'ai-bot:state', payload: { matchId, ball: { x: game.ball.x, y: game.ball.y, vx: game.ball.vx, vy: game.ball.vy }, paddles: state.paddles, score: state.score } });
 
         if (game.isGameOver) {
           clearInterval(interval);
@@ -207,7 +207,7 @@ export class GameSessionManager {
           const winnerId  = score.left > score.right ? userId : AI_BOT_USER_ID;
 
           // PvE: no match:result — this session has no DB record.
-          this.send({ type: 'ia-bot:sessionEnd', payload: { matchId } });
+          this.send({ type: 'ai-bot:sessionEnd', payload: { matchId } });
           this.send({ type: 'game:end', to: [userId], payload: { matchId, winnerId, score, reason: 'completed' } });
         }
       }, this.tickIntervalMs);
@@ -265,7 +265,7 @@ export class GameSessionManager {
         // PvE: immediate teardown with no grace window — the bot doesn't wait.
         clearInterval(session.interval);
         this.sessions.delete(matchId);
-        this.send({ type: 'ia-bot:sessionEnd', payload: { matchId } });
+        this.send({ type: 'ai-bot:sessionEnd', payload: { matchId } });
         // Skip game:end — the browser socket is already gone (involuntary disconnect).
         return;
       }
@@ -328,7 +328,7 @@ export class GameSessionManager {
         this.sessions.delete(matchId);
         const { score } = session.game.getState();
         this.send({ type: 'game:end', to: [userId], payload: { matchId, winnerId: AI_BOT_USER_ID, score, reason: 'forfeit' } });
-        this.send({ type: 'ia-bot:sessionEnd', payload: { matchId } });
+        this.send({ type: 'ai-bot:sessionEnd', payload: { matchId } });
         return;
       }
 

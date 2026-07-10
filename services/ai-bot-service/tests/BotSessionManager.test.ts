@@ -14,7 +14,7 @@ const DEFAULT_CFG = {
 
 function makeSessionStart(matchId: number, difficulty: string, botSide = 'right'): WsEnvelope {
   return {
-    type: 'ia-bot:sessionStart',
+    type: 'ai-bot:sessionStart',
     payload: { matchId, difficulty, botSide, physicsConfig: DEFAULT_CFG },
   };
 }
@@ -25,7 +25,7 @@ function makeState(
   paddles: { leftY: number; rightY: number } = { leftY: 260, rightY: 260 },
 ): WsEnvelope {
   return {
-    type: 'ia-bot:state',
+    type: 'ai-bot:state',
     payload: { matchId, ball, paddles, score: { left: 0, right: 0 } },
   };
 }
@@ -64,12 +64,12 @@ describe('BotSessionManager', () => {
 
   it('handleSessionEnd removes the session', () => {
     manager.handleSessionStart(makeSessionStart(1, 'easy'));
-    manager.handleSessionEnd({ type: 'ia-bot:sessionEnd', payload: { matchId: 1 } });
+    manager.handleSessionEnd({ type: 'ai-bot:sessionEnd', payload: { matchId: 1 } });
     expect(manager.sessionCount()).toBe(0);
   });
 
   it('handleSessionEnd is a no-op for unknown matchId', () => {
-    expect(() => manager.handleSessionEnd({ type: 'ia-bot:sessionEnd', payload: { matchId: 99 } })).not.toThrow();
+    expect(() => manager.handleSessionEnd({ type: 'ai-bot:sessionEnd', payload: { matchId: 99 } })).not.toThrow();
   });
 
   // ── state handling and direction decisions ───────────────────────────────────

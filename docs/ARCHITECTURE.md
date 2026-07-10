@@ -29,7 +29,7 @@ Sole entry point for REST calls. Validates the JWT access token on every request
 
 ### gateway-ws
 
-Hub for all WebSocket traffic. The browser connects through nginx at `/ws`. game-service, match-service, tournament-service, and ia-bot-service each connect to it as clients rather than exposing their own ports. It routes messages both directions between browser and backend services. Holds `JWT_SECRET`, so it authenticates WebSocket connections the same way gateway-api authenticates REST ones. Sits on both networks.
+Hub for all WebSocket traffic. The browser connects through nginx at `/ws`. game-service, match-service, tournament-service, and ai-bot-service each connect to it as clients rather than exposing their own ports. It routes messages both directions between browser and backend services. Holds `JWT_SECRET`, so it authenticates WebSocket connections the same way gateway-api authenticates REST ones. Sits on both networks.
 
 ---
 
@@ -55,7 +55,7 @@ Owns the full lifecycle of a match outside of gameplay itself: pairing waiting p
 
 tournament-service is intended to manage the structure and state of a tournament: creating brackets, advancing players through rounds, and determining a winner. It connects to gateway-ws to send and receive tournament events, has DATABASE_URL to persist brackets and results across a tournament's lifetime.
 
-### ia-bot-service
+### ai-bot-service
 
 AI opponent for guest play or solo matches. Connects to gateway-ws like the other game-domain services. No DATABASE_URL — guest sessions are deliberately ephemeral, in memory only, gone when the connection closes.
 

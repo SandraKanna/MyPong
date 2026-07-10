@@ -6,14 +6,14 @@ function main(): void {
   const wsClient = createInternalClient({
     url:            config.GATEWAY_WS_URL,
     secret:         config.INTERNAL_SERVICE_SECRET,
-    serviceName:    'ia-bot-service',
+    serviceName:    'ai-bot-service',
     healthFilePath: '/tmp/healthy',
   });
 
   const manager = new BotSessionManager((msg) => wsClient.send(msg));
-  wsClient.onMessage('ia-bot:sessionStart', (msg) => manager.handleSessionStart(msg));
-  wsClient.onMessage('ia-bot:state',        (msg) => manager.handleState(msg));
-  wsClient.onMessage('ia-bot:sessionEnd',   (msg) => manager.handleSessionEnd(msg));
+  wsClient.onMessage('ai-bot:sessionStart', (msg) => manager.handleSessionStart(msg));
+  wsClient.onMessage('ai-bot:state',        (msg) => manager.handleState(msg));
+  wsClient.onMessage('ai-bot:sessionEnd',   (msg) => manager.handleSessionEnd(msg));
 
   process.on('SIGTERM', () => {
     wsClient.close();
