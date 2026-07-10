@@ -364,8 +364,76 @@ async function main() {
       fail('forfeit by disconnect — game:end not received on surviving browser within 12s', err.message);
     }
 
+    // ── Tests 9-11: game:startAI — live PvE session with moving AI paddle ────────
+    // Isolated browser so the PvE session has no overlap with the PvP sessions above.
+    let pveBrowser;
+    try {
+      const tokenPvE = await getAccessToken('pve');
+      pveBrowser = await connectBrowser(tokenPvE);
+      sockets.push(pveBrowser.ws);
+      pass(`PvE browser authenticates (userId: ${pveBrowser.userId})`);
+    } catch (err) {
+      fail('PvE browser authenticates', err.message);
+      process.exit(1);
+    }
+
+    // Attach state collector before sending game:startAI so no frame is missed.
+    const pveFrames = [];
+    function pveStateCollector(data) {
+      let msg;
+      try { msg = JSON.parse(data.toString()); } catch { return; }
+      if (msg.type === 'game:state') pveFrames.push(msg);
+    }
+    pveBrowser.ws.on('message', pveStateCollector);
+
+    pveBrowser.ws.send(JSON.stringify({ type: 'game:startAI', payload: { difficulty: 'hard' } }));
+
+    // Test 10: match:matched arrives immediately (before countdown) with PvE shape.
+    // AI_BOT_USER_ID=0 is the reserved bot userId (never issued by Postgres serials).
+    const AI_BOT_USER_ID = 0;
+    try {
+      const matched = await wsNextMatching(pveBrowser.ws, (m) => m.type === 'match:matched', 3000);
+      const mp = matched.payload;
+      if (
+        typeof mp?.matchId  === 'number'  &&
+        mp?.players?.[String(pveBrowser.userId)]   === 'left'  &&
+        mp?.players?.[String(AI_BOT_USER_ID)]      === 'right' &&
+        typeof mp?.startsAt === 'string'
+      ) {
+        pass(`game:startAI → match:matched (matchId: ${mp.matchId}, human: left, bot: right)`);
+      } else {
+        fail('game:startAI → match:matched shape invalid', JSON.stringify(matched));
+      }
+    } catch (err) {
+      fail('game:startAI → no match:matched within 3s', err.message);
+    }
+
+    // Wait for the 3-second countdown + 8 seconds of live game time.
+    // Hard bot: reactionDelayMs=0, updateIntervalMs=16ms — reacts on the first tick
+    // after the game starts. With ~1.25s per rally and 50/50 initial ball direction,
+    // P(ball never reaches the bot's side in 8s) ≈ 1.5%.
+    await new Promise((resolve) => setTimeout(resolve, 11_500));
+
+    pveBrowser.ws.removeListener('message', pveStateCollector);
+
+    // Test 11: bot paddle actually moved — confirms ia-bot-service received
+    // ia-bot:state frames, ran its prediction logic, and sent game:botInput
+    // back through gateway-ws to game-service, which applied it to the physics.
+    if (pveFrames.length === 0) {
+      fail('PvE — no game:state frames received after countdown (ia-bot-service alive?)');
+    } else {
+      const firstRightY = pveFrames[0].payload.paddles.rightY;
+      const botMoved    = pveFrames.some((f) => f.payload.paddles.rightY !== firstRightY);
+      if (botMoved) {
+        const lastRightY = pveFrames[pveFrames.length - 1].payload.paddles.rightY;
+        pass(`PvE — AI paddle moved (${firstRightY} → ${lastRightY} over ${pveFrames.length} frames)`);
+      } else {
+        fail(`PvE — AI paddle static across ${pveFrames.length} frames — is ia-bot-service connected to gateway-ws?`);
+      }
+    }
+
   } finally {
-    // ── Test 9: clean shutdown ─────────────────────────────────────────────────
+    // ── Test 12: clean shutdown ────────────────────────────────────────────────
     const closePromises = sockets.map((ws) => {
       const p = wsClose(ws);
       ws.close(1000);
