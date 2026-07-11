@@ -64,6 +64,13 @@ export async function logout(): Promise<void> {
   useAuthStore.getState().clearAuth();
 }
 
+export async function loginAsGuest(): Promise<void> {
+  const res = await apiClient('/api/auth/guest', { method: 'POST' });
+  if (!res.ok) throw new Error('Could not start guest session');
+  const { accessToken } = (await res.json()) as { accessToken: string };
+  useAuthStore.getState().setGuestAuth(accessToken);
+}
+
 // STUDY: register() intentionally does NOT log the user in. After a successful
 // registration the caller navigates to /login — the user must authenticate
 // explicitly. This keeps the flow simple and avoids a second round-trip for a

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { connectWs, disconnectWs, onWsMessage, sendWs } from '../../../shared/ws/wsClient';
+import { useState } from 'react';
+import { sendWs } from '../../../shared/ws/wsClient';
 import { useGameStore } from '../state/gameStore';
+import { useWsSession } from '../hooks/useWsSession';
 import LobbyView from '../components/LobbyView';
 import CountdownOverlay from '../components/CountdownOverlay';
 import GameBoard from '../components/GameBoard';
@@ -22,47 +23,19 @@ export default function GamePage() {
   // on the next "Find Match" click and doesn't need to survive navigation.
   const [rejectedMessage, setRejectedMessage] = useState<string | null>(null);
 
-  // STUDY: [] as the dependency array means "run only on mount, never re-run on
-  // re-renders" — equivalent to componentDidMount in class components. Omitting
-  // the array entirely would re-run the effect on every render, re-subscribing
-  // to every WS message type on each state change.
-  useEffect(() => {
-    connectWs();
-
-    const { setConnected, handleMatchMatched, handleMatchRejected, handleGameState,
-            handleGamePaused, handleGameResumed, handleGameEnd } = useGameStore.getState();
-
-    // Collect all unsubscribes so the cleanup can remove every handler at once.
-    const unsubs = [
-      onWsMessage('connected', (msg) => {
-        // payload.userId is typed `string` in wsMessages.ts (JSON keys are strings)
-        setConnected(Number(msg.payload.userId));
-      }),
-      onWsMessage('match:matched', (msg) => {
-        handleMatchMatched(msg.payload.matchId, msg.payload.players, msg.payload.startsAt);
-      }),
-      onWsMessage('match:rejected', (msg) => {
-        handleMatchRejected(msg.payload.message);
-        setRejectedMessage(msg.payload.message);
-      }),
-      onWsMessage('game:state',   (msg) => handleGameState(msg.payload)),
-      onWsMessage('game:paused',  (msg) => handleGamePaused(msg.payload.disconnectedUserId, msg.payload.graceEndsAt)),
-      onWsMessage('game:resumed', (msg) => handleGameResumed(msg.payload)),
-      onWsMessage('game:end',     (msg) => handleGameEnd(msg.payload.winnerId, msg.payload.reason, msg.payload.score)),
-    ];
-
-    return () => {
-      unsubs.forEach((unsub) => unsub());
-      const phase = useGameStore.getState().phase;
-      if (phase === 'queued') {
-        sendWs({ type: 'match:cancel' });
-      } else if (phase === 'matched' || phase === 'playing' || phase === 'paused') {
-        sendWs({ type: 'game:leave' });
-      }
-      useGameStore.getState().reset();
-      disconnectWs();
-    };
-  }, []);
+  useWsSession({
+    onConnected:     (userId) => useGameStore.getState().setConnected(userId),
+    onMatchMatched:  (matchId, players, startsAt) =>
+      useGameStore.getState().handleMatchMatched(matchId, players, startsAt),
+    onMatchRejected: (msg) => {
+      useGameStore.getState().handleMatchRejected(msg);
+      setRejectedMessage(msg);
+    },
+    onGameState:    (snap)          => useGameStore.getState().handleGameState(snap),
+    onGamePaused:   (uid, at)       => useGameStore.getState().handleGamePaused(uid, at),
+    onGameResumed:  (pay)           => useGameStore.getState().handleGameResumed(pay),
+    onGameEnd:      (wid, r, score) => useGameStore.getState().handleGameEnd(wid, r, score),
+  });
 
   function handleFindMatch() {
     setRejectedMessage(null); // clear any previous rejection before re-queuing
