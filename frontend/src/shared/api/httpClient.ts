@@ -13,9 +13,14 @@ const AUTH_SKIP_PATHS = [
   '/api/auth/login',
   '/api/auth/register',
   '/api/auth/refresh',
+  '/api/auth/guest',
 ];
 
 async function refreshAccessToken(): Promise<boolean> {
+  // Guest tokens are ephemeral and have no refresh cookie — skip entirely.
+  // Guards both the race condition (loginAsGuest() resolves before the
+  // bootstrap 401 arrives) and any future REST 401 during a guest session.
+  if (useAuthStore.getState().isGuest) return false;
   try {
     // STUDY: credentials:'include' tells fetch to send the httpOnly cookie.
     // Without it, same-origin cookies are still sent in most browsers, but

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { useGameStore } from '../src/features/game/state/gameStore';
+import { useAuthStore } from '../src/features/auth/state/authState';
 
 // Mock the entire wsClient module so no real WebSocket is created.
 // connectWs, disconnectWs, and onWsMessage are all replaced with vi.fn().
@@ -17,10 +19,22 @@ vi.mock('../src/shared/ws/wsClient', () => ({
 import { connectWs, disconnectWs, onWsMessage, sendWs } from '../src/shared/ws/wsClient';
 import GamePage from '../src/features/game/pages/GamePage';
 
+// Wraps GamePage in a MemoryRouter so useLocation/useNavigate are satisfied.
+// initialEntries defaults to ['/game'] with no location state (guestAutoStart absent).
+function renderGamePage(opts: { guestAutoStart?: boolean } = {}) {
+  const initialState = opts.guestAutoStart ? { guestAutoStart: true } : undefined;
+  return render(
+    <MemoryRouter initialEntries={[{ pathname: '/game', state: initialState }]}>
+      <GamePage />
+    </MemoryRouter>,
+  );
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   // Reset to a clean idle state before each test.
   useGameStore.setState({ phase: 'idle', myUserId: null });
+  useAuthStore.setState({ status: 'authenticated', accessToken: 'tok', user: null, isGuest: false });
   // onWsMessage must always return an unsubscribe fn, even after resetAllMocks.
   vi.mocked(onWsMessage).mockReturnValue(vi.fn());
 });
@@ -29,7 +43,7 @@ describe('GamePage — unmount sends phase-aware WS message', () => {
   it('sends match:cancel on unmount when phase is queued', () => {
     useGameStore.setState({ phase: 'queued', myUserId: 42 });
 
-    const { unmount } = render(<GamePage />);
+    const { unmount } = renderGamePage();
     unmount();
 
     expect(vi.mocked(sendWs)).toHaveBeenCalledWith({ type: 'match:cancel' });
@@ -43,7 +57,7 @@ describe('GamePage — unmount sends phase-aware WS message', () => {
       startsAt: new Date(Date.now() + 3000).toISOString(),
     });
 
-    const { unmount } = render(<GamePage />);
+    const { unmount } = renderGamePage();
     unmount();
 
     expect(vi.mocked(sendWs)).toHaveBeenCalledWith({ type: 'game:leave' });
@@ -55,7 +69,7 @@ describe('GamePage — unmount sends phase-aware WS message', () => {
       players: { '42': 'left', '17': 'right' }, mySide: 'left', snapshot: null,
     });
 
-    const { unmount } = render(<GamePage />);
+    const { unmount } = renderGamePage();
     unmount();
 
     expect(vi.mocked(sendWs)).toHaveBeenCalledWith({ type: 'game:leave' });
@@ -68,14 +82,14 @@ describe('GamePage — unmount sends phase-aware WS message', () => {
       disconnectedUserId: 17, graceEndsAt: new Date(Date.now() + 5000).toISOString(),
     });
 
-    const { unmount } = render(<GamePage />);
+    const { unmount } = renderGamePage();
     unmount();
 
     expect(vi.mocked(sendWs)).toHaveBeenCalledWith({ type: 'game:leave' });
   });
 
   it('sends no WS message on unmount when phase is idle', () => {
-    const { unmount } = render(<GamePage />);
+    const { unmount } = renderGamePage();
     unmount();
 
     expect(vi.mocked(sendWs)).not.toHaveBeenCalled();
@@ -88,7 +102,7 @@ describe('GamePage — unmount sends phase-aware WS message', () => {
       players: { '42': 'left', '17': 'right' },
     });
 
-    const { unmount } = render(<GamePage />);
+    const { unmount } = renderGamePage();
     unmount();
 
     expect(vi.mocked(sendWs)).not.toHaveBeenCalled();
@@ -101,7 +115,7 @@ describe('GamePage — unmount sends phase-aware WS message', () => {
     vi.mocked(sendWs).mockImplementation(() => { callOrder.push('sendWs'); });
     vi.mocked(disconnectWs).mockImplementation(() => { callOrder.push('disconnectWs'); });
 
-    const { unmount } = render(<GamePage />);
+    const { unmount } = renderGamePage();
     unmount();
 
     expect(callOrder).toEqual(['sendWs', 'disconnectWs']);
@@ -125,7 +139,11 @@ describe('GamePage — handleStartAI', () => {
     useGameStore.setState({ phase: 'idle', myUserId: null });
 
     const user = userEvent.setup();
-    render(<GamePage />);
+    render(
+      <MemoryRouter initialEntries={['/game']}>
+        <GamePage />
+      </MemoryRouter>,
+    );
 
     // Click hard difficulty then Play vs AI to trigger handleStartAI('hard').
     await user.click(screen.getByRole('button', { name: 'hard' }));
@@ -145,7 +163,11 @@ describe('GamePage — handleStartAI', () => {
     useGameStore.setState({ phase: 'idle', myUserId: null });
 
     const user = userEvent.setup();
-    render(<GamePage />);
+    render(
+      <MemoryRouter initialEntries={['/game']}>
+        <GamePage />
+      </MemoryRouter>,
+    );
 
     await user.click(screen.getByRole('button', { name: 'Play vs AI' }));
 
@@ -164,7 +186,11 @@ describe('GamePage — handleStartAI', () => {
     const setQueuedSpy = vi.spyOn(useGameStore.getState(), 'setQueued');
 
     const user = userEvent.setup();
-    render(<GamePage />);
+    render(
+      <MemoryRouter initialEntries={['/game']}>
+        <GamePage />
+      </MemoryRouter>,
+    );
 
     await user.click(screen.getByRole('button', { name: 'Play vs AI' }));
 
@@ -177,7 +203,7 @@ describe('GamePage — unmount cleanup', () => {
   it('calls reset() on every unmount regardless of phase', () => {
     const resetSpy = vi.spyOn(useGameStore.getState(), 'reset');
 
-    const { unmount } = render(<GamePage />);
+    const { unmount } = renderGamePage();
     unmount();
 
     expect(resetSpy).toHaveBeenCalledOnce();
@@ -185,7 +211,7 @@ describe('GamePage — unmount cleanup', () => {
   });
 
   it('calls disconnectWs() exactly once on unmount', () => {
-    const { unmount } = render(<GamePage />);
+    const { unmount } = renderGamePage();
     expect(vi.mocked(disconnectWs)).not.toHaveBeenCalled();
 
     unmount();
@@ -199,7 +225,7 @@ describe('GamePage — unmount cleanup', () => {
     let callIdx = 0;
     vi.mocked(onWsMessage).mockImplementation(() => unsubs[callIdx++] ?? vi.fn());
 
-    const { unmount } = render(<GamePage />);
+    const { unmount } = renderGamePage();
     unmount();
 
     // All 7 subscriptions (connected, match:matched, match:rejected,
@@ -209,3 +235,4 @@ describe('GamePage — unmount cleanup', () => {
     }
   });
 });
+

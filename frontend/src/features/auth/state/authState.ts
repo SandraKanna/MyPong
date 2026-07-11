@@ -16,7 +16,9 @@ interface AuthSlice {
   status: AuthStatus;
   accessToken: string | null;
   user: User | null;
+  isGuest: boolean;
   setAuth: (accessToken: string, user?: User) => void;
+  setGuestAuth: (accessToken: string) => void;
   clearAuth: () => void;
 }
 
@@ -28,6 +30,7 @@ export const useAuthStore = create<AuthSlice>()((set) => ({
   status: 'loading',
   accessToken: null,
   user: null,
+  isGuest: false,
 
   // STUDY: user is optional so the same action works for both login (which
   // provides a user object) and token refresh (which only provides a new token).
@@ -39,6 +42,9 @@ export const useAuthStore = create<AuthSlice>()((set) => ({
       user: user !== undefined ? user : state.user,
     })),
 
+  setGuestAuth: (accessToken) =>
+    set({ accessToken, status: 'authenticated', isGuest: true }),
+
   clearAuth: () =>
-    set({ accessToken: null, user: null, status: 'unauthenticated' }),
+    set({ accessToken: null, user: null, status: 'unauthenticated', isGuest: false }),
 }));
