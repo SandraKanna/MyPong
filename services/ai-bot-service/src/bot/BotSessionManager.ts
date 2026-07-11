@@ -50,6 +50,11 @@ interface SessionEndPayload {
 // TUNE: smaller = bot stops closer to target before coasting (hard preset floor).
 const STOP_THRESHOLD_MIN_PX = 4;
 
+// TUNE: probability that easy bot deliberately misses when it is tied or ahead.
+const EASY_MISS_PROBABILITY = 0.5;
+// TUNE: how far past the paddle edge the bot aims on a deliberate miss (guarantees a clean miss).
+const EASY_MISS_OFFSET_PX   = 70;
+
 export class BotSessionManager {
   private readonly send:     (envelope: WsEnvelope) => void;
   private readonly sessions: Map<number, BotSession> = new Map();
@@ -115,10 +120,19 @@ export class BotSessionManager {
         // for the whole approach prevents re-rolling the random error every tick,
         // which would cause visible jitter.
         if (!session.ballApproaching) {
-          const stepsToImpact    = (faceX - ball.x) / ball.vx;
-          const predicted        = predictBallY(ball.y, ball.vy, stepsToImpact, cfg.fieldHeight, cfg.ballRadius);
-          const error            = (Math.random() * 2 - 1) * preset.trackingErrorPx;
-          session.cachedTargetY  = predicted + error;
+          const stepsToImpact = (faceX - ball.x) / ball.vx;
+          const predicted     = predictBallY(ball.y, ball.vy, stepsToImpact, cfg.fieldHeight, cfg.ballRadius);
+
+          let targetY: number;
+          if (session.difficulty === 'easy' && Math.random() < EASY_MISS_PROBABILITY) {
+            // Deliberate miss: aim past the paddle edge to let the human score.
+            const missDir = Math.random() < 0.5 ? 1 : -1;
+            targetY = predicted + missDir * EASY_MISS_OFFSET_PX;
+          } else {
+            const error = (Math.random() * 2 - 1) * preset.trackingErrorPx;
+            targetY = predicted + error;
+          }
+          session.cachedTargetY  = targetY;
           session.ballApproaching = true;
         }
       } else {

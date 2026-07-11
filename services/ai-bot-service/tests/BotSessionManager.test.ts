@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BotSessionManager } from '../src/bot/BotSessionManager';
+import { BOT_PRESETS } from '../src/bot/botConfig';
 import type { WsEnvelope } from '@mypong/types';
 
 const DEFAULT_CFG = {
@@ -23,10 +24,11 @@ function makeState(
   matchId: number,
   ball:    { x: number; y: number; vx: number; vy: number },
   paddles: { leftY: number; rightY: number } = { leftY: 260, rightY: 260 },
+  score:   { left: number; right: number }   = { left: 0, right: 0 },
 ): WsEnvelope {
   return {
     type: 'ai-bot:state',
-    payload: { matchId, ball, paddles, score: { left: 0, right: 0 } },
+    payload: { matchId, ball, paddles, score },
   };
 }
 
@@ -351,5 +353,88 @@ describe('BotSessionManager', () => {
 
     // Zero direction-change sends after the first 'stop' — no oscillation.
     expect(dirMsgs.slice(firstStopIdx + 1)).toHaveLength(0);
+  });
+
+  // ── difficulty presets ───────────────────────────────────────────────────────
+
+  it('normal preset trackingErrorPx is 60', () => {
+    expect(BOT_PRESETS.normal.trackingErrorPx).toBe(60);
+  });
+
+  // ── easy deliberate-miss mechanic ────────────────────────────────────────────
+
+  it('easy bot aims a guaranteed-miss offset when tied and random < 0.5', () => {
+    // Bot is on the right. Ball moves right (toward bot). Score tied (0-0).
+    // Math.random returns 0.1 twice: first for EASY_MISS_PROBABILITY check (<0.5 → miss),
+    // second for missDir choice (<0.5 → +1 direction).
+    // With EASY_MISS_OFFSET_PX=70 and predicted landing near field centre,
+    // cachedTargetY will be far outside the ±50px contact half-window.
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.1);
+
+    manager.handleSessionStart(makeSessionStart(1, 'easy'));
+    vi.advanceTimersByTime(300); // past reactionDelayMs
+
+    manager.handleState(makeState(
+      1,
+      { x: 400, y: 300, vx: 5, vy: 0 },
+      { leftY: 260, rightY: 260 },
+    ));
+
+    randSpy.mockRestore();
+
+    // The bot should send a direction command (aiming toward the miss target).
+    const cmd = sent.find((m) => m.type === 'game:botInput');
+    expect(cmd).toBeDefined();
+    // The key assertion: cachedTargetY was set to an extreme value.
+    // We verify indirectly — with paddleCenterY=300 and targetY=300+70=370 (or 230),
+    // distance is ±70px which exceeds stopThreshold(5), so bot must move.
+    const dir = (cmd!.payload as { direction: string }).direction;
+    expect(dir === 'up' || dir === 'down').toBe(true);
+  });
+
+  it('easy bot deliberately misses when the human is ahead (score-independent)', () => {
+    // Miss probability is flat — applies regardless of the current score.
+    // Math.random=0.1: first call (<0.5) triggers the miss, second (<0.5) picks missDir +1.
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.1);
+
+    manager.handleSessionStart(makeSessionStart(1, 'easy'));
+    vi.advanceTimersByTime(300);
+
+    manager.handleState(makeState(
+      1,
+      { x: 400, y: 300, vx: 5, vy: 0 },
+      { leftY: 260, rightY: 260 },
+      { left: 3, right: 1 }, // human ahead — miss still fires
+    ));
+
+    randSpy.mockRestore();
+
+    // targetY = 300 + 70 = 370; paddleCenterY = 300; distance = +70 > stopThreshold → 'down'.
+    const cmd = sent.find((m) => m.type === 'game:botInput');
+    expect(cmd).toBeDefined();
+    expect((cmd!.payload as { direction: string }).direction).toBe('down');
+  });
+
+  it('hard bot never deliberately misses regardless of score', () => {
+    // Even with Math.random always < 0.5, hard difficulty should not invoke miss logic.
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.1);
+
+    manager.handleSessionStart(makeSessionStart(1, 'hard'));
+    vi.advanceTimersByTime(0); // hard reactionDelayMs=0
+
+    manager.handleState(makeState(
+      1,
+      { x: 400, y: 300, vx: 5, vy: 0 },
+      { leftY: 260, rightY: 260 },
+      { left: 0, right: 5 }, // bot way ahead — would trigger miss if difficulty were easy
+    ));
+
+    randSpy.mockRestore();
+
+    // Hard bot has trackingErrorPx=0, so with no miss offset cachedTargetY=300.
+    // PaddleCenter=300, distance=0, within stopThreshold(7) → 'stop' — no message sent.
+    // That means no game:botInput was sent at all (direction unchanged from initial 'stop').
+    const cmd = sent.find((m) => m.type === 'game:botInput');
+    expect(cmd).toBeUndefined();
   });
 });

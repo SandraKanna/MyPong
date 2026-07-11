@@ -1,7 +1,23 @@
 import type { WsEnvelope } from '@mypong/types';
 import { Game } from '../physics/game';
-import { DEFAULT_PHYSICS_CONFIG } from '../physics/physicsConfig';
+import { DEFAULT_PHYSICS_CONFIG, type PhysicsConfig } from '../physics/physicsConfig';
 import { AI_BOT_USER_ID } from './constants';
+
+// TUNE: PvE-only ball speed for easy — gives the human more time to recover from an extreme paddle position on serve.
+const EASY_BALL_SPEED   = 6;
+// TUNE: PvE-only ball speed for hard — raises pace so rallies resolve faster.
+const HARD_BALL_SPEED   = 11;
+// TUNE: PvE-only paddle speed for hard — both paddles move faster symmetrically, matching the higher ball speed.
+const HARD_PADDLE_SPEED = 9;
+
+// Returns the PhysicsConfig overrides for a PvE session at the given difficulty.
+// normal returns an empty object (uses all defaults). The result is spread over
+// DEFAULT_PHYSICS_CONFIG at both call sites so overrides live in exactly one place.
+function pvePhysicsOverrides(difficulty: 'easy' | 'normal' | 'hard'): Partial<PhysicsConfig> {
+  if (difficulty === 'easy') return { ballInitialSpeed: EASY_BALL_SPEED };
+  if (difficulty === 'hard') return { ballInitialSpeed: HARD_BALL_SPEED, paddleSpeed: HARD_PADDLE_SPEED };
+  return {};
+}
 
 export interface Session {
   game:              Game;
@@ -25,7 +41,7 @@ interface PendingMatch {
 interface Opts {
   tickIntervalMs?: number;
   gracePeriodMs?:  number;
-  gameFactory?:    () => Game;
+  gameFactory?:    (overrides?: Partial<PhysicsConfig>) => Game;
 }
 
 interface AssignPayload {
@@ -47,7 +63,7 @@ export class GameSessionManager {
   private readonly send:           (envelope: WsEnvelope) => void;
   private readonly tickIntervalMs: number;
   private readonly gracePeriodMs:  number;
-  private readonly gameFactory:    () => Game;
+  private readonly gameFactory:    (overrides?: Partial<PhysicsConfig>) => Game;
   private readonly sessions:       Map<number, Session>      = new Map();
   private readonly pendingMatchIds: Map<number, PendingMatch> = new Map();
 
@@ -55,7 +71,7 @@ export class GameSessionManager {
     this.send           = send;
     this.tickIntervalMs = opts?.tickIntervalMs ?? 16;
     this.gracePeriodMs  = opts?.gracePeriodMs  ?? 5_000;
-    this.gameFactory    = opts?.gameFactory    ?? (() => new Game());
+    this.gameFactory    = opts?.gameFactory    ?? ((overrides) => new Game(overrides));
   }
 
   handleAssign(envelope: WsEnvelope): void {
@@ -174,7 +190,8 @@ export class GameSessionManager {
     // match:matched reuses the existing 3-second countdown frontend flow.
     this.send({ type: 'match:matched', to: [userId], payload: { matchId, players: Object.fromEntries(players), startsAt } });
     // Notify the bot service so it can prepare its session state.
-    this.send({ type: 'ai-bot:sessionStart', payload: { matchId, difficulty, botSide: 'right', physicsConfig: DEFAULT_PHYSICS_CONFIG } });
+    const pvePhysicsConfig = { ...DEFAULT_PHYSICS_CONFIG, ...pvePhysicsOverrides(difficulty) };
+    this.send({ type: 'ai-bot:sessionStart', payload: { matchId, difficulty, botSide: 'right', physicsConfig: pvePhysicsConfig } });
 
     const delay = Math.max(0, new Date(startsAt).getTime() - Date.now());
 
@@ -187,7 +204,7 @@ export class GameSessionManager {
         return;
       }
 
-      const game      = this.gameFactory();
+      const game      = this.gameFactory(pvePhysicsOverrides(difficulty));
       const startedAt = new Date();
 
       const interval = setInterval(() => {

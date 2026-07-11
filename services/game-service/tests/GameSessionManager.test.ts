@@ -701,7 +701,7 @@ describe('GameSessionManager', () => {
   it('PvE game over sends ai-bot:sessionEnd and game:end to human; never sends match:result', () => {
     manager = new GameSessionManager(
       (msg) => sent.push(msg),
-      { gameFactory: () => new Game({ maxScore: 1 }) },
+      { gameFactory: (overrides) => new Game({ maxScore: 1, ...overrides }) },
     );
     vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
     manager.handleStartAI(makeStartAI(42, 'easy'));
@@ -731,7 +731,7 @@ describe('GameSessionManager', () => {
   it('PvE game over assigns winnerId=AI_BOT_USER_ID when bot side scores enough', () => {
     manager = new GameSessionManager(
       (msg) => sent.push(msg),
-      { gameFactory: () => new Game({ maxScore: 1 }) },
+      { gameFactory: (overrides) => new Game({ maxScore: 1, ...overrides }) },
     );
     vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
     manager.handleStartAI(makeStartAI(42, 'easy'));
@@ -837,5 +837,43 @@ describe('GameSessionManager', () => {
     manager.handleBotInput({ type: 'game:botInput', payload: { matchId: 1, direction: 'up' } });
 
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('hard PvE sends physicsConfig with ballInitialSpeed=11 and paddleSpeed=9 in ai-bot:sessionStart', () => {
+    manager.handleStartAI(makeStartAI(42, 'hard'));
+
+    const botStart = sent.find((m) => m.type === 'ai-bot:sessionStart');
+    expect(botStart).toBeDefined();
+    const bp = botStart!.payload as { physicsConfig: { ballInitialSpeed: number; paddleSpeed: number } };
+    expect(bp.physicsConfig.ballInitialSpeed).toBe(11);
+    expect(bp.physicsConfig.paddleSpeed).toBe(9);
+  });
+
+  it('easy PvE sends physicsConfig with ballInitialSpeed=6 in ai-bot:sessionStart', () => {
+    manager.handleStartAI(makeStartAI(42, 'easy'));
+
+    const botStart = sent.find((m) => m.type === 'ai-bot:sessionStart');
+    expect(botStart).toBeDefined();
+    const bp = botStart!.payload as { physicsConfig: { ballInitialSpeed: number; paddleSpeed: number } };
+    expect(bp.physicsConfig.ballInitialSpeed).toBe(6);
+    expect(bp.physicsConfig.paddleSpeed).toBe(7); // unchanged from default
+  });
+
+  it('hard PvE game uses ballInitialSpeed=11 — ball.vx magnitude is 11 after countdown', () => {
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    manager.handleStartAI(makeStartAI(42, 'hard'));
+    vi.advanceTimersByTime(3_000);
+
+    const session = [...(manager as unknown as { sessions: Map<number, { game: Game }> }).sessions.values()][0]!;
+    expect(Math.abs(session.game.ball.vx)).toBe(11);
+  });
+
+  it('easy PvE game uses ballInitialSpeed=6 — ball.vx magnitude is 6 after countdown', () => {
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    manager.handleStartAI(makeStartAI(42, 'easy'));
+    vi.advanceTimersByTime(3_000);
+
+    const session = [...(manager as unknown as { sessions: Map<number, { game: Game }> }).sessions.values()][0]!;
+    expect(Math.abs(session.game.ball.vx)).toBe(6);
   });
 });
