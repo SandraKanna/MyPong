@@ -23,5 +23,5 @@ export const DEFAULT_PHYSICS_CONFIG: PhysicsConfig = {
   paddleHeight:       80,
   paddleSpeed:        7,
   paddleXOffset:      20,
-  maxScore:           11,
+  maxScore:           7,
 };

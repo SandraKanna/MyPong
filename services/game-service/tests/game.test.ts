@@ -3,7 +3,7 @@ import { Game } from '../src/physics/game';
 
 // DEFAULT_PHYSICS_CONFIG values referenced throughout:
 //   fieldWidth=800, fieldHeight=600, ballRadius=10, ballInitialSpeed=8
-//   paddleWidth=12, paddleHeight=80, paddleSpeed=7, paddleXOffset=20, maxScore=11
+//   paddleWidth=12, paddleHeight=80, paddleSpeed=7, paddleXOffset=20, maxScore=7
 //   left paddle face at x = paddleXOffset + paddleWidth = 32
 //   right paddle face at x = fieldWidth - paddleXOffset - paddleWidth = 768
 //   initial leftPaddleY = rightPaddleY = (600-80)/2 = 260  (spans y=260..340)
@@ -106,6 +106,18 @@ describe('Game — scoring', () => {
     const game = new Game({ maxScore: 1 });
     game.ball.reset(5, 50, -10, 0);
     game.update();
+    expect(game.isGameOver).toBe(true);
+  });
+
+  it('default maxScore is 7 — game ends at 7 points, not before', () => {
+    const game = new Game();
+    for (let i = 0; i < 6; i++) {
+      game.ball.reset(5, 50, -10, 0);
+      game.update(); // right scores each time
+    }
+    expect(game.isGameOver).toBe(false);
+    game.ball.reset(5, 50, -10, 0);
+    game.update(); // 7th point — game over
     expect(game.isGameOver).toBe(true);
   });
 
