@@ -69,11 +69,11 @@ export class Game {
     // Scoring: ball exits a side wall.
     if (this.ball.x - this.ball.radius <= 0) {
       this.score.right++;
-      this.resetBall();
+      this.resetBall('right');
       if (this.score.right >= this.cfg.maxScore) this.isGameOver = true;
     } else if (this.ball.x + this.ball.radius >= this.cfg.fieldWidth) {
       this.score.left++;
-      this.resetBall();
+      this.resetBall('left');
       if (this.score.left >= this.cfg.maxScore) this.isGameOver = true;
     }
   }
@@ -133,9 +133,11 @@ export class Game {
     this.ball.setSpeed(this.ball.vx, offset * this.cfg.ballInitialSpeed);
   }
 
-  private resetBall(): void {
+  // Serves toward the side that just scored, giving the player who just missed
+  // a full round trip before the ball returns to their end.
+  private resetBall(scoringSide: 'left' | 'right'): void {
     const { fieldWidth, fieldHeight, ballInitialSpeed } = this.cfg;
-    const vx = ballInitialSpeed * (Math.random() < 0.5 ? 1 : -1);
+    const vx = ballInitialSpeed * (scoringSide === 'right' ? 1 : -1);
     const vy = ballInitialSpeed * (Math.random() < 0.5 ? 1 : -1);
     this.ball.reset(fieldWidth / 2, fieldHeight / 2, vx, vy);
   }

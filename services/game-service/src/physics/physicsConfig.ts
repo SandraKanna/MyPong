@@ -21,7 +21,7 @@ export const DEFAULT_PHYSICS_CONFIG: PhysicsConfig = {
   ballMaxSpeedFactor: 3.0,
   paddleWidth:        12,
   paddleHeight:       80,
-  paddleSpeed:        5,
+  paddleSpeed:        7,
   paddleXOffset:      20,
   maxScore:           11,
 };

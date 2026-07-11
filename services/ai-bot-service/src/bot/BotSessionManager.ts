@@ -135,7 +135,7 @@ export class BotSessionManager {
     const targetY       = session.cachedTargetY ?? cfg.fieldHeight / 2;
     const paddleCenterY = paddleY + cfg.paddleHeight / 2;
     const distance      = targetY - paddleCenterY;
-    // TUNE: max(4, paddleSpeed) = 5px — paddle stops when center is within one
+    // TUNE: max(4, paddleSpeed) = 7px — paddle stops when center is within one
     // tick's travel of the target, preventing single-tick overshoot oscillation.
     const stopThreshold = Math.max(STOP_THRESHOLD_MIN_PX, cfg.paddleSpeed);
 
