@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { Game } from '../src/physics/game';
 
 // DEFAULT_PHYSICS_CONFIG values referenced throughout:
-//   fieldWidth=800, fieldHeight=600, ballRadius=10, ballInitialSpeed=5
-//   paddleWidth=12, paddleHeight=80, paddleSpeed=5, paddleXOffset=20, maxScore=11
+//   fieldWidth=800, fieldHeight=600, ballRadius=10, ballInitialSpeed=8
+//   paddleWidth=12, paddleHeight=80, paddleSpeed=7, paddleXOffset=20, maxScore=11
 //   left paddle face at x = paddleXOffset + paddleWidth = 32
 //   right paddle face at x = fieldWidth - paddleXOffset - paddleWidth = 768
 //   initial leftPaddleY = rightPaddleY = (600-80)/2 = 260  (spans y=260..340)
@@ -22,14 +22,14 @@ describe('Game — paddle movement', () => {
     const game = new Game();
     game.setPaddleDirection('left', 'up');
     game.update();
-    expect(game.getState().paddles.leftY).toBe(255); // 260 - 5
+    expect(game.getState().paddles.leftY).toBe(253); // 260 - 7
   });
 
   it('moves the right paddle down by paddleSpeed after one update()', () => {
     const game = new Game();
     game.setPaddleDirection('right', 'down');
     game.update();
-    expect(game.getState().paddles.rightY).toBe(265); // 260 + 5
+    expect(game.getState().paddles.rightY).toBe(267); // 260 + 7
   });
 
   it('does not move the paddle when direction is stop', () => {
@@ -42,8 +42,7 @@ describe('Game — paddle movement', () => {
   it('clamps left paddle at top bound (leftY cannot go below 0)', () => {
     const game = new Game();
     game.setPaddleDirection('left', 'up');
-    // 260 / paddleSpeed=5 = 52 ticks to reach 0; 55 ticks ensures it stays clamped.
-    // Ball does not score in 55 ticks: x=400+5*55=675, 675+10=685 < right face (768).
+    // 260 / paddleSpeed=7 = 37.1 ticks to reach 0; 55 ticks ensures it stays clamped.
     for (let i = 0; i < 55; i++) game.update();
     expect(game.getState().paddles.leftY).toBe(0);
   });
@@ -184,31 +183,42 @@ describe('Game — ball-paddle collision', () => {
 });
 
 describe('Game — resetBall() serve direction', () => {
-  // resetBall() is triggered by scoring. vi.spyOn(Math, 'random') controls
-  // the two calls: first determines vx sign, second determines vy sign.
-  // < 0.5 → positive component; ≥ 0.5 → negative component.
+  // resetBall() is triggered by scoring. vx is determined by which side just
+  // scored (deterministic); vy remains a random coin flip via Math.random.
+  // ball.reset(5, 50, -10, 0) → exits left wall → right scores.
+  // ball.reset(795, 50, 10, 0) → exits right wall → left scores.
 
-  it('serves with positive vx and positive vy when both random calls return < 0.5', () => {
-    const spy = vi.spyOn(Math, 'random')
-      .mockReturnValueOnce(0.1)  // vx → positive
-      .mockReturnValueOnce(0.1); // vy → positive
+  it('serves toward the right (vx > 0) when the right side just scored', () => {
     const game = new Game();
-    game.ball.reset(5, 50, -10, 0); // exits left wall → right scores → resetBall()
+    game.ball.reset(5, 50, -10, 0); // exits left wall → right scores → resetBall('right')
     game.update();
     expect(game.ball.vx).toBeGreaterThan(0);
-    expect(game.ball.vy).toBeGreaterThan(0);
-    spy.mockRestore();
   });
 
-  it('serves with negative vx and negative vy when both random calls return ≥ 0.5', () => {
-    const spy = vi.spyOn(Math, 'random')
-      .mockReturnValueOnce(0.9)  // vx → negative
-      .mockReturnValueOnce(0.9); // vy → negative
+  it('serves toward the left (vx < 0) when the left side just scored', () => {
     const game = new Game();
-    game.ball.reset(5, 50, -10, 0);
+    game.ball.reset(795, 50, 10, 0); // exits right wall → left scores → resetBall('left')
     game.update();
     expect(game.ball.vx).toBeLessThan(0);
-    expect(game.ball.vy).toBeLessThan(0);
+  });
+
+  it('randomises vy independently of the scoring side', () => {
+    // vy is still a coin flip; confirm both signs are reachable regardless of
+    // which side scored.
+    const spy = vi.spyOn(Math, 'random');
+
+    spy.mockReturnValue(0.1); // < 0.5 → positive vy
+    const game1 = new Game();
+    game1.ball.reset(5, 50, -10, 0);
+    game1.update();
+    expect(game1.ball.vy).toBeGreaterThan(0);
+
+    spy.mockReturnValue(0.9); // ≥ 0.5 → negative vy
+    const game2 = new Game();
+    game2.ball.reset(5, 50, -10, 0);
+    game2.update();
+    expect(game2.ball.vy).toBeLessThan(0);
+
     spy.mockRestore();
   });
 });
