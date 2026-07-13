@@ -30,7 +30,7 @@ export default function ProtectedRoute() {
   // Without this guard, every page load would flash the login redirect before
   // the /refresh call completes and status becomes 'authenticated'.
   if (status === 'loading') {
-    return <p>Loading...</p>;
+    return <p>Loading…</p>;
   }
 
   if (status !== 'authenticated') {
@@ -43,7 +43,7 @@ export default function ProtectedRoute() {
   // 'loading' auth status does above — without this, a route could flash its
   // real content for one frame before the redirect below fires.
   if (usernameStatus === 'unknown' || usernameStatus === 'checking') {
-    return <p>Loading...</p>;
+    return <p>Loading…</p>;
   }
 
   // STUDY: Any authenticated route other than /profile requires a username —

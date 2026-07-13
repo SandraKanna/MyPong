@@ -109,3 +109,31 @@ export async function apiClient(
 
   return fetch(path, { ...options, headers: retryHeaders });
 }
+
+// STUDY: Tries to extract a human-readable message from any error response.
+// The backend can send errors in three different shapes:
+//   { details: { field: ['msg', ...] } }  — Zod validation errors (field-keyed)
+//   { error: 'something' }                — most auth/profile errors
+//   { message: 'something' }              — fallback convention
+// We check `details` first because it carries the most specific information.
+// The outer try/catch handles responses that aren't JSON at all (e.g., nginx 502).
+export async function readErrorMessage(res: Response, defaultMessage: string): Promise<string> {
+  try {
+    const body = (await res.json()) as {
+      error?: string;
+      details?: Record<string, string[]>;
+      message?: string;
+    };
+
+    if (body.details) {
+      // STUDY: Object.values → flat() collapses { email: ['too short'], password: ['required'] }
+      // into a single array ['too short', 'required'], then join puts them on separate lines.
+      const messages = Object.values(body.details).flat();
+      if (messages.length > 0) return messages.join('\n');
+    }
+
+    return body.error ?? body.message ?? defaultMessage;
+  } catch {
+    return defaultMessage;
+  }
+}
