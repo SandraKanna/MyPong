@@ -33,7 +33,7 @@ Response `200`: `{ accessToken: string }`
 Response `400`: `{ error: 'Invalid input', details: { email?: string[], password?: string[] } }` — Zod validation failure.
 Response `401`: `{ error: 'Invalid credentials' }` — same message for wrong email and wrong password; prevents user enumeration.
 
-Also sets the refresh token as an httpOnly cookie.
+Also sets the refresh token as an httpOnly cookie. Before issuing it, revokes every refresh token still active (`revoked_at IS NULL`) for this `user_id` — a successful login enforces a single active session per account, ending any other session that was still logged in. `/register` and `/guest` do not do this: `/register` has no prior session to revoke, and `/guest` never issues a refresh token.
 
 > auth-service never calls user-service. Profile data (username, avatar) is fetched separately via `GET /api/users/me` after login.
 

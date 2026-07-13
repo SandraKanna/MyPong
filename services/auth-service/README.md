@@ -7,11 +7,13 @@ Handles registration, login, token refresh, and logout. Issues short-lived JWT a
 | Method   | Path        | Description                                     |
 |----------|-------------|-------------------------------------------------|
 | `POST`   | `/register` | Create account — email + password (argon2 hash); returns access token in body, refresh token as httpOnly cookie, same as `/login` |
-| `POST`   | `/login`    | Returns access token in body; refresh token as httpOnly cookie  |
+| `POST`   | `/login`    | Returns access token in body; refresh token as httpOnly cookie; revokes any previously active refresh tokens for this user (single session per account) |
 | `POST`   | `/refresh`  | Returns new access token in body, rotates refresh cookie        |
 | `DELETE` | `/session`  | Revokes refresh token (logout)                  |
 
 These paths are without the `/api/auth` prefix — that prefix is added by gateway-api when proxying. Direct calls to auth-service use the bare paths.
+
+**Single session per account.** Each successful `/login` revokes every refresh token row still active for that `user_id` (`revoked_at IS NULL`) before issuing a new one — a second login effectively logs out any other session for the same account. This only happens on `/login`: `/register` has no prior session to revoke, and `/guest` never issues a refresh token at all. The access token from a superseded session keeps working until it expires (up to 15 minutes) or until its own `/refresh` is attempted, whichever comes first — `/refresh` checks `revoked_at` and rejects a revoked token immediately. gateway-ws separately closes the superseded session's WebSocket connection with code `4009` as soon as the new login's connection replaces it — see [gateway-ws's README](../gateway-ws/README.md#single-session-per-user).
 
 
 ## Testing

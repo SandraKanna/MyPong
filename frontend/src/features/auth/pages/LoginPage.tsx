@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { login } from '../api/auth';
+import { useAuthStore } from '../state/authState';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -14,6 +15,22 @@ export default function LoginPage() {
   // STUDY: `submitting` disables the button while the request is in flight,
   // preventing a double-submit if the user clicks twice before the response arrives.
   const [submitting, setSubmitting] = useState(false);
+
+  // STUDY: Lazy initializer captures the store's value only once, on this
+  // component's first mount — it does NOT subscribe to future changes. That's
+  // what lets this survive the store field being cleared a moment later: if we
+  // read the store directly on every render instead, the message would flash
+  // and then disappear as soon as the clearing effect below runs.
+  const [sessionEndedMessage] = useState(() => useAuthStore.getState().sessionEndedMessage);
+
+  useEffect(() => {
+    // Consume the flash message immediately (runs once on mount) so a later,
+    // unrelated visit to this page (e.g. after a normal logout) never shows a
+    // stale one.
+    if (sessionEndedMessage !== null) {
+      useAuthStore.getState().setSessionEndedMessage(null);
+    }
+  }, [sessionEndedMessage]);
 
   async function handleSubmit() {
     setSubmitting(true);
@@ -41,6 +58,9 @@ export default function LoginPage() {
       <h2 className="font-display text-fg text-lg uppercase tracking-widest text-center">
         Log In
       </h2>
+      {sessionEndedMessage !== null && (
+        <p className="font-sans text-muted text-sm text-center">{sessionEndedMessage}</p>
+      )}
       <div className="flex flex-col gap-2">
         <label htmlFor="email" className="font-sans text-muted text-sm">
           Email

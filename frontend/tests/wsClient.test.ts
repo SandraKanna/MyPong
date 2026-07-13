@@ -27,7 +27,7 @@ class MockWebSocket {
 
   onopen:    (() => void) | null = null;
   onmessage: ((event: { data: string }) => void) | null = null;
-  onclose:   (() => void) | null = null;
+  onclose:   ((event: { code: number }) => void) | null = null;
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   constructor(_url: string) {
@@ -39,9 +39,11 @@ class MockWebSocket {
     this.sent.push(data);
   }
 
-  close(): void {
+  // Defaults to 1000 (Normal Closure) — tests that care about a specific
+  // close code (e.g. 4009) pass it explicitly.
+  close(code = 1000): void {
     this.readyState = MockWebSocket.CLOSED;
-    this.onclose?.();
+    this.onclose?.({ code });
   }
 
   // ── Test helpers ────────────────────────────────────────────────────────────
@@ -357,5 +359,72 @@ describe('wsClient — reconnect on unexpected close', () => {
     expect(MockWebSocket.callCount).toBe(2);
     vi.advanceTimersByTime(1);   // fires at exactly 500ms
     expect(MockWebSocket.callCount).toBe(3);
+  });
+});
+
+describe('wsClient — close code 4009 (session replaced)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('does not attempt to reconnect after a 4009 close', async () => {
+    vi.useFakeTimers();
+    const { getInstance } = installMockWebSocket();
+    const { useAuthStore } = await import('../src/features/auth/state/authState');
+    const { connectWs }    = await import('../src/shared/ws/wsClient');
+
+    useAuthStore.setState({ accessToken: 'tok', status: 'authenticated', user: null, isGuest: false });
+    connectWs();
+    getInstance().triggerOpen();
+    getInstance().close(4009);
+
+    vi.advanceTimersByTime(10_000);
+    expect(MockWebSocket.callCount).toBe(1); // no reconnect attempt at any backoff delay
+  });
+
+  it('clears auth state on a 4009 close', async () => {
+    const { getInstance } = installMockWebSocket();
+    const { useAuthStore } = await import('../src/features/auth/state/authState');
+    const { connectWs }    = await import('../src/shared/ws/wsClient');
+
+    useAuthStore.setState({ accessToken: 'tok', status: 'authenticated', user: null, isGuest: false });
+    connectWs();
+    getInstance().triggerOpen();
+    getInstance().close(4009);
+
+    const state = useAuthStore.getState();
+    expect(state.status).toBe('unauthenticated');
+    expect(state.accessToken).toBeNull();
+  });
+
+  it('sets a distinct sessionEndedMessage on a 4009 close', async () => {
+    const { getInstance } = installMockWebSocket();
+    const { useAuthStore } = await import('../src/features/auth/state/authState');
+    const { connectWs }    = await import('../src/shared/ws/wsClient');
+
+    useAuthStore.setState({ accessToken: 'tok', status: 'authenticated', user: null, isGuest: false });
+    connectWs();
+    getInstance().triggerOpen();
+    getInstance().close(4009);
+
+    expect(useAuthStore.getState().sessionEndedMessage).toBe('You were signed in elsewhere.');
+  });
+
+  it('does not touch auth state or attempt reconnection for an ordinary close code', async () => {
+    vi.useFakeTimers();
+    const { getInstance } = installMockWebSocket();
+    const { useAuthStore } = await import('../src/features/auth/state/authState');
+    const { connectWs }    = await import('../src/shared/ws/wsClient');
+
+    useAuthStore.setState({ accessToken: 'tok', status: 'authenticated', user: null, isGuest: false });
+    connectWs();
+    getInstance().triggerOpen();
+    getInstance().close(1006); // unexpected close, not a session replacement
+
+    expect(useAuthStore.getState().status).toBe('authenticated');
+    expect(useAuthStore.getState().sessionEndedMessage).toBeNull();
+
+    vi.advanceTimersByTime(500);
+    expect(MockWebSocket.callCount).toBe(2); // normal reconnect still happens
   });
 });

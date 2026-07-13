@@ -5,6 +5,12 @@ import type { IncomingMessage, OutgoingMessage } from './wsMessages';
 // refreshPromise. One socket shared by all callers; survives React re-renders.
 let socket: WebSocket | null = null;
 
+// gateway-ws closes a browser connection with this code when a newer login
+// for the same account replaces it — see gateway-ws/README.md#single-session-per-user.
+// Duplicated here as a matching constant since there is no shared runtime
+// package between frontend and backend for this kind of literal.
+const CLOSE_SESSION_REPLACED = 4009;
+
 // STUDY: Handlers persist for the module lifetime (the browser tab). They are
 // NOT cleared on close or disconnect — subscriptions survive reconnects so
 // callers don't have to re-register. The trade-off: callers MUST call the
@@ -72,8 +78,21 @@ export function connectWs(): void {
     }
   };
 
-  socket.onclose = () => {
+  socket.onclose = (event: CloseEvent) => {
     socket = null;
+
+    if (event.code === CLOSE_SESSION_REPLACED) {
+      // This session was deliberately superseded by a newer login elsewhere,
+      // not dropped by a network blip — reconnecting would be pointless, since
+      // the refresh token behind this session was revoked server-side at the
+      // same time gateway-ws closed this socket. disconnectWs() marks `stopped`
+      // and clears any pending reconnect timer, same as a deliberate logout.
+      disconnectWs();
+      useAuthStore.getState().clearAuth();
+      useAuthStore.getState().setSessionEndedMessage('You were signed in elsewhere.');
+      return;
+    }
+
     // handlers intentionally left intact — see module-level comment above.
     if (stopped) return;
     const retryAfter = delay;
