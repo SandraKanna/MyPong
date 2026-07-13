@@ -52,13 +52,19 @@ export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
     const { email, password } = result.data;
 
-    const existing = await authService.findUserByEmail(email);
-    if (existing) {
-      return reply.status(409).send({ error: 'Email already registered' });
+    let user: authService.User;
+    try {
+      const passwordHash = await authService.hashPassword(password);
+      user = await authService.createUser(email, passwordHash);
+    } catch (err) {
+      // Postgres enforces the email uniqueness constraint atomically on the INSERT —
+      // catching 23505 here closes the race window that a find-then-check (SELECT,
+      // then INSERT) would leave open between the two statements.
+      if ((err as { code?: string }).code === '23505') {
+        return reply.status(409).send({ error: 'Email already registered' });
+      }
+      throw err;
     }
-
-    const passwordHash = await authService.hashPassword(password);
-    const user = await authService.createUser(email, passwordHash);
 
     const session = await issueSession(reply, user.id);
     return reply.status(201).send(session);
