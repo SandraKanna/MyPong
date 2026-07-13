@@ -24,7 +24,12 @@ function makeSnapshot(overrides?: Partial<GameStatePayload>): GameStatePayload {
   };
 }
 
-function setPausedState(graceEndsAt: string, disconnectedUserId = 17) {
+// opponentUsername defaults to null (unresolved) — matches GameBoard.test.tsx's
+// setPlayingState() convention. disconnectedUserId is still part of PausedPhase's
+// shape (gameStore stores it regardless), but PauseOverlay itself no longer reads
+// it for display — it reads opponentUsername instead, since game:paused is only
+// ever sent to the still-connected opponent, so the two always name the same person.
+function setPausedState(graceEndsAt: string, opponentUsername: string | null = null) {
   useGameStore.setState({
     phase: 'paused',
     myUserId: 42,
@@ -32,8 +37,9 @@ function setPausedState(graceEndsAt: string, disconnectedUserId = 17) {
     players: PLAYERS,
     mySide: 'left',
     snapshot: makeSnapshot(),
-    disconnectedUserId,
+    disconnectedUserId: 17,
     graceEndsAt,
+    opponentUsername,
   });
 }
 
@@ -48,11 +54,25 @@ afterEach(() => {
 });
 
 describe('PauseOverlay — rendering', () => {
-  it('renders the disconnected player id', () => {
+  it('renders the resolved opponent name', () => {
     const graceEndsAt = new Date(Date.now() + 5000).toISOString();
-    setPausedState(graceEndsAt, 17);
+    setPausedState(graceEndsAt, 'bob');
     render(<PauseOverlay />);
-    expect(screen.getByText(/Player 17 disconnected/)).toBeDefined();
+    expect(screen.getByText(/Player bob disconnected/)).toBeDefined();
+  });
+
+  it('falls back to "Opponent" while the name is still unresolved', () => {
+    const graceEndsAt = new Date(Date.now() + 5000).toISOString();
+    setPausedState(graceEndsAt, null);
+    render(<PauseOverlay />);
+    expect(screen.getByText(/Player Opponent disconnected/)).toBeDefined();
+  });
+
+  it('renders "Computer" for a PvE match', () => {
+    const graceEndsAt = new Date(Date.now() + 5000).toISOString();
+    setPausedState(graceEndsAt, 'Computer');
+    render(<PauseOverlay />);
+    expect(screen.getByText(/Player Computer disconnected/)).toBeDefined();
   });
 
   it('renders the initial countdown from graceEndsAt', () => {

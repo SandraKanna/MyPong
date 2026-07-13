@@ -3,8 +3,13 @@ import { useGameStore } from '../state/gameStore';
 
 export default function PauseOverlay() {
   // GamePage only renders this when phase === 'paused', so these fields exist.
-  const disconnectedUserId = useGameStore((s) => s.phase === 'paused' ? s.disconnectedUserId : null);
-  const graceEndsAt        = useGameStore((s) => s.phase === 'paused' ? s.graceEndsAt : null);
+  // game:paused is only ever sent to the still-connected opponent (never to the
+  // player who disconnected), so opponentUsername here always names the same
+  // person as the disconnect — same resolved-name source GameBoard/ResultScreen
+  // already read, with the same 'Opponent' fallback while it's still resolving.
+  const opponentUsername = useGameStore((s) => s.phase === 'paused' ? s.opponentUsername : null);
+  const graceEndsAt      = useGameStore((s) => s.phase === 'paused' ? s.graceEndsAt : null);
+  const opponentName = opponentUsername ?? 'Opponent';
 
   // STUDY: useState(() => expr) lazy initializer — runs once on mount to avoid
   // recomputing the initial value on every render (same pattern as CountdownOverlay).
@@ -32,7 +37,7 @@ export default function PauseOverlay() {
     <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center">
       <div className="bg-surface-raised border border-border px-12 py-8 text-center flex flex-col gap-4">
         <h2 className="font-display text-fg text-xl uppercase tracking-widest">Paused</h2>
-        <p className="font-sans text-muted">Player {disconnectedUserId} disconnected</p>
+        <p className="font-sans text-muted">Player {opponentName} disconnected</p>
         <p className="font-sans text-muted">
           Waiting for reconnect… <span className="font-display text-primary">{Math.max(remaining, 0)}s</span>
         </p>
