@@ -5,6 +5,7 @@ type Difficulty = 'easy' | 'normal' | 'hard';
 interface LobbyViewProps {
   phase: 'idle' | 'queued';
   rejectedMessage: string | null;
+  myName: string;
   onFindMatch: () => void;
   onCancel: () => void;
   onStartAI: (difficulty: Difficulty) => void;
@@ -12,7 +13,7 @@ interface LobbyViewProps {
 
 // Pure presentational component — no store access, no WS calls.
 // All side effects live in GamePage and arrive via props.
-export default function LobbyView({ phase, rejectedMessage, onFindMatch, onCancel, onStartAI }: LobbyViewProps) {
+export default function LobbyView({ phase, rejectedMessage, myName, onFindMatch, onCancel, onStartAI }: LobbyViewProps) {
   // Difficulty selection lives here: GamePage only needs the value at click time.
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
 
@@ -32,6 +33,8 @@ export default function LobbyView({ phase, rejectedMessage, onFindMatch, onCance
 
   return (
     <div className="flex flex-col items-center gap-12 py-16">
+      <p className="font-sans text-muted text-sm">Playing as {myName}</p>
+
       {/* PvP section */}
       <div className="flex flex-col items-center gap-4">
         <h1 className="font-display text-fg text-lg uppercase tracking-widest">Find a Match</h1>

@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { loginAsGuest } from '../../auth/api/auth';
 import { useGameStore } from '../../game/state/gameStore';
 import { useWsSession } from '../../game/hooks/useWsSession';
+import { useMyDisplayName } from '../../profile/state/profileState';
 import { sendWs } from '../../../shared/ws/wsClient';
 import GameBoard from '../../game/components/GameBoard';
 
@@ -46,6 +47,10 @@ function InlineCountdown({ startsAt }: { startsAt: string }) {
   const [remaining, setRemaining] = useState(() =>
     Math.ceil((new Date(startsAt).getTime() - Date.now()) / 1000),
   );
+  const myName = useMyDisplayName(); // 'You' for a guest — see useMyDisplayName
+  // Always resolves to 'Computer' here — this view is PvE-only, so the
+  // opponent is always the AI bot (see gameStore's AI_BOT_USER_ID special case).
+  const opponentName = useGameStore((s) => s.opponentUsername) ?? 'Computer';
   useEffect(() => {
     const id = setInterval(() => {
       const next = Math.ceil((new Date(startsAt).getTime() - Date.now()) / 1000);
@@ -54,7 +59,12 @@ function InlineCountdown({ startsAt }: { startsAt: string }) {
     }, 1000);
     return () => clearInterval(id);
   }, [startsAt]);
-  return <p className="font-display text-8xl text-primary">{Math.max(remaining, 0)}</p>;
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <p className="font-sans text-fg text-sm">{myName} vs {opponentName}</p>
+      <p className="font-display text-8xl text-primary">{Math.max(remaining, 0)}</p>
+    </div>
+  );
 }
 
 // Active guest session — mounted only while a PvE game is in progress.

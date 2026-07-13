@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useGameStore } from '../src/features/game/state/gameStore';
+import { useAuthStore } from '../src/features/auth/state/authState';
+import { useProfileStore } from '../src/features/profile/state/profileState';
 import type { GameStatePayload } from '../src/shared/ws/wsMessages';
 
 vi.mock('../src/shared/ws/wsClient', () => ({
@@ -25,21 +27,29 @@ function makeSnapshot(overrides?: Partial<GameStatePayload>): GameStatePayload {
   };
 }
 
-// Drive the store to 'playing' with a given snapshot.
-function setPlayingState(snap: GameStatePayload) {
+// Drive the store to 'playing' with a given snapshot. mySide defaults to
+// 'left' (myUserId 42) and opponentUsername defaults to null (unresolved) —
+// tests that care about name labels override either explicitly.
+function setPlayingState(
+  snap: GameStatePayload,
+  overrides?: { mySide?: 'left' | 'right'; opponentUsername?: string | null },
+) {
   useGameStore.setState({
     phase: 'playing',
     myUserId: 42,
     matchId: 1,
     players: PLAYERS,
-    mySide: 'left',
+    mySide: overrides?.mySide ?? 'left',
     snapshot: snap,
+    opponentUsername: overrides?.opponentUsername ?? null,
   });
 }
 
 beforeEach(() => {
   vi.resetAllMocks();
-  useGameStore.setState({ phase: 'idle', myUserId: null });
+  useGameStore.setState({ phase: 'idle', myUserId: null, opponentUsername: null });
+  useAuthStore.setState({ status: 'authenticated', accessToken: 'tok', user: null, isGuest: false });
+  useProfileStore.setState({ usernameStatus: 'set', username: 'alice' });
 });
 
 describe('GameBoard — rendering', () => {
@@ -78,6 +88,45 @@ describe('GameBoard — rendering', () => {
     render(<GameBoard />);
     expect(screen.getByText('3')).toBeDefined();
     expect(screen.getByText('5')).toBeDefined();
+  });
+});
+
+describe('GameBoard — player names', () => {
+  it('labels my side with myName and the other side with the resolved opponent name', () => {
+    setPlayingState(makeSnapshot(), { mySide: 'left', opponentUsername: 'bob' });
+    render(<GameBoard />);
+    expect(screen.getByText('alice')).toBeDefined();
+    expect(screen.getByText('bob')).toBeDefined();
+  });
+
+  it('swaps sides correctly when mySide is right', () => {
+    setPlayingState(makeSnapshot(), { mySide: 'right', opponentUsername: 'bob' });
+    const { container } = render(<GameBoard />);
+    const texts = Array.from(container.querySelectorAll('text'));
+    const myLabel = texts.find((t) => t.textContent === 'alice');
+    const oppLabel = texts.find((t) => t.textContent === 'bob');
+    // Left slot is at x = FIELD_W/4 = 200, right slot at x = FIELD_W*3/4 = 600.
+    expect(myLabel?.getAttribute('x')).toBe('600');
+    expect(oppLabel?.getAttribute('x')).toBe('200');
+  });
+
+  it('falls back to "Opponent" while the opponent name is still unresolved', () => {
+    setPlayingState(makeSnapshot(), { opponentUsername: null });
+    render(<GameBoard />);
+    expect(screen.getByText('Opponent')).toBeDefined();
+  });
+
+  it('shows "Computer" for a PvE match', () => {
+    setPlayingState(makeSnapshot(), { opponentUsername: 'Computer' });
+    render(<GameBoard />);
+    expect(screen.getByText('Computer')).toBeDefined();
+  });
+
+  it('shows "You" as my label for a guest session', () => {
+    useAuthStore.setState({ status: 'authenticated', accessToken: 'guest-tok', user: null, isGuest: true });
+    setPlayingState(makeSnapshot(), { opponentUsername: 'Computer' });
+    render(<GameBoard />);
+    expect(screen.getByText('You')).toBeDefined();
   });
 });
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useGameStore } from '../state/gameStore';
+import { useMyDisplayName } from '../../profile/state/profileState';
 import { sendWs } from '../../../shared/ws/wsClient';
 
 // Physics constants duplicated from game-service/src/physics/physicsConfig.ts
@@ -22,7 +23,14 @@ export default function GameBoard() {
   const matchId = useGameStore((s) =>
     s.phase === 'playing' || s.phase === 'paused' ? s.matchId : null,
   );
+  const mySide = useGameStore((s) =>
+    s.phase === 'playing' || s.phase === 'paused' ? s.mySide : null,
+  );
+  const opponentUsername = useGameStore((s) =>
+    s.phase === 'playing' || s.phase === 'paused' ? s.opponentUsername : null,
+  );
   const phase = useGameStore((s) => s.phase);
+  const myName = useMyDisplayName();
 
   // STUDY: useRef holds a value that persists across renders without causing
   // re-renders when it changes — right for tracking keystroke state, which
@@ -85,6 +93,10 @@ export default function GameBoard() {
   if (!snapshot) return null;
 
   const { ball, paddles, score } = snapshot;
+  // Opponent name may briefly be null while gameStore's lookup is in flight.
+  const opponentName = opponentUsername ?? 'Opponent';
+  const leftName  = mySide === 'left'  ? myName : opponentName;
+  const rightName = mySide === 'left'  ? opponentName : myName;
 
   return (
     // STUDY: viewBox defines the internal coordinate system (800×600 units).
@@ -99,9 +111,16 @@ export default function GameBoard() {
       {/* Center net */}
       <line x1={FIELD_W / 2} y1={0} x2={FIELD_W / 2} y2={FIELD_H} stroke="#ffffff" strokeOpacity={0.3} strokeWidth={4} strokeDasharray="16 20" />
 
+      {/* Player names — small labels above each side's score. y=16 keeps the
+          16px glyphs (baseline-to-cap-height ~11px) well clear of the score
+          text below, which now starts at y=85 (its ~28px ascent puts its top
+          edge around y=57 — ~40px of clearance from the name's baseline). */}
+      <text x={FIELD_W / 4}     y={16} textAnchor="middle" fill="#9d8bc4" fontSize={16} fontFamily="'Press Start 2P', monospace">{leftName}</text>
+      <text x={FIELD_W * 3 / 4} y={16} textAnchor="middle" fill="#9d8bc4" fontSize={16} fontFamily="'Press Start 2P', monospace">{rightName}</text>
+
       {/* Score — positioned above the mid-line, one per side */}
-      <text x={FIELD_W / 4}     y={50} textAnchor="middle" fill="#05d9e8" fontSize={40} fontFamily="'Press Start 2P', monospace">{score.left}</text>
-      <text x={FIELD_W * 3 / 4} y={50} textAnchor="middle" fill="#05d9e8" fontSize={40} fontFamily="'Press Start 2P', monospace">{score.right}</text>
+      <text x={FIELD_W / 4}     y={85} textAnchor="middle" fill="#05d9e8" fontSize={40} fontFamily="'Press Start 2P', monospace">{score.left}</text>
+      <text x={FIELD_W * 3 / 4} y={85} textAnchor="middle" fill="#05d9e8" fontSize={40} fontFamily="'Press Start 2P', monospace">{score.right}</text>
 
       {/* Ball — ball.x/y are the center coordinates from game-service */}
       <circle cx={ball.x} cy={ball.y} r={BALL_R} fill="#fff" />

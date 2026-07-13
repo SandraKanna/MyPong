@@ -65,7 +65,7 @@ export default function ProfilePage() {
         avatarUrl: profile.avatar_url,
       });
       setDraft(profile.username); // reflect the server's saved value (e.g. trimmed), not what the user typed
-      useProfileStore.getState().markUsernameSet(); // marks the username as set immediately, rather than waiting on the store's own next check
+      useProfileStore.getState().markUsernameSet(profile.username); // marks the username as set immediately, rather than waiting on the store's own next check
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Failed to save');
     } finally {

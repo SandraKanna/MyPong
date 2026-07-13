@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useGameStore } from '../src/features/game/state/gameStore';
+import { useAuthStore } from '../src/features/auth/state/authState';
+import { useProfileStore } from '../src/features/profile/state/profileState';
 import ResultScreen from '../src/features/game/components/ResultScreen';
 
 vi.mock('../src/shared/ws/wsClient', () => ({
@@ -16,6 +18,7 @@ function setEndedState(
   winnerId: number,
   reason: 'completed' | 'forfeit',
   score = { left: 3, right: 5 },
+  opponentUsername: string | null = null,
 ) {
   useGameStore.setState({
     phase:    'ended',
@@ -24,12 +27,15 @@ function setEndedState(
     reason,
     score,
     players:  PLAYERS,
+    opponentUsername,
   });
 }
 
 beforeEach(() => {
   vi.resetAllMocks();
-  useGameStore.setState({ phase: 'idle', myUserId: null });
+  useGameStore.setState({ phase: 'idle', myUserId: null, opponentUsername: null });
+  useAuthStore.setState({ status: 'authenticated', accessToken: 'tok', user: null, isGuest: false });
+  useProfileStore.setState({ usernameStatus: 'set', username: 'alice' });
 });
 
 describe('ResultScreen — headings', () => {
@@ -79,6 +85,47 @@ describe('ResultScreen — score', () => {
     setEndedState(42, 'forfeit', { left: 0, right: 0 });
     render(<ResultScreen />);
     expect(screen.getByText('0 – 0')).toBeDefined();
+  });
+});
+
+describe('ResultScreen — player names', () => {
+  it('labels the score line as "{leftName} vs {rightName}" when I am on the left', () => {
+    setEndedState(42, 'completed', { left: 11, right: 3 }, 'bob');
+    render(<ResultScreen />);
+    expect(screen.getByText('alice vs bob')).toBeDefined();
+  });
+
+  it('swaps the label order when I am on the right', () => {
+    useGameStore.setState({
+      phase: 'ended',
+      myUserId: 17,
+      winnerId: 17,
+      reason: 'completed',
+      score: { left: 3, right: 11 },
+      players: PLAYERS,
+      opponentUsername: 'bob',
+    });
+    render(<ResultScreen />);
+    expect(screen.getByText('bob vs alice')).toBeDefined();
+  });
+
+  it('falls back to "Opponent" when the name was never resolved', () => {
+    setEndedState(42, 'completed', { left: 11, right: 3 }, null);
+    render(<ResultScreen />);
+    expect(screen.getByText('alice vs Opponent')).toBeDefined();
+  });
+
+  it('shows "Computer" for a PvE match', () => {
+    setEndedState(42, 'completed', { left: 11, right: 3 }, 'Computer');
+    render(<ResultScreen />);
+    expect(screen.getByText('alice vs Computer')).toBeDefined();
+  });
+
+  it('shows "You" as my label for a guest session', () => {
+    useAuthStore.setState({ status: 'authenticated', accessToken: 'guest-tok', user: null, isGuest: true });
+    setEndedState(42, 'completed', { left: 11, right: 3 }, 'Computer');
+    render(<ResultScreen />);
+    expect(screen.getByText('You vs Computer')).toBeDefined();
   });
 });
 

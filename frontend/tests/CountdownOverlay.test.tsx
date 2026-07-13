@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import CountdownOverlay from '../src/features/game/components/CountdownOverlay';
+import { useGameStore } from '../src/features/game/state/gameStore';
+import { useAuthStore } from '../src/features/auth/state/authState';
+import { useProfileStore } from '../src/features/profile/state/profileState';
 
 function startsAtMs(msFromNow: number) {
   return new Date(Date.now() + msFromNow).toISOString();
@@ -8,6 +11,9 @@ function startsAtMs(msFromNow: number) {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  useGameStore.setState({ opponentUsername: null });
+  useAuthStore.setState({ status: 'authenticated', accessToken: 'tok', user: null, isGuest: false });
+  useProfileStore.setState({ usernameStatus: 'set', username: 'alice' });
 });
 
 afterEach(() => {
@@ -50,5 +56,32 @@ describe('CountdownOverlay', () => {
     // Advancing further should not change the displayed value.
     act(() => { vi.advanceTimersByTime(5_000); });
     expect(screen.getByText('0')).toBeDefined();
+  });
+});
+
+describe('CountdownOverlay — player names', () => {
+  it('shows "{myName} vs Opponent" while the opponent lookup is still in flight', () => {
+    useProfileStore.setState({ usernameStatus: 'set', username: 'alice' });
+    render(<CountdownOverlay startsAt={startsAtMs(3_000)} />);
+    expect(screen.getByText('alice vs Opponent')).toBeDefined();
+  });
+
+  it('shows the resolved opponent name once gameStore has it', () => {
+    useGameStore.setState({ opponentUsername: 'bob' });
+    render(<CountdownOverlay startsAt={startsAtMs(3_000)} />);
+    expect(screen.getByText('alice vs bob')).toBeDefined();
+  });
+
+  it('shows "Computer" for a PvE match', () => {
+    useGameStore.setState({ opponentUsername: 'Computer' });
+    render(<CountdownOverlay startsAt={startsAtMs(3_000)} />);
+    expect(screen.getByText('alice vs Computer')).toBeDefined();
+  });
+
+  it('shows "You" as my name for a guest session', () => {
+    useAuthStore.setState({ status: 'authenticated', accessToken: 'guest-tok', user: null, isGuest: true });
+    useGameStore.setState({ opponentUsername: 'Computer' });
+    render(<CountdownOverlay startsAt={startsAtMs(3_000)} />);
+    expect(screen.getByText('You vs Computer')).toBeDefined();
   });
 });
