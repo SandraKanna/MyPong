@@ -1,6 +1,9 @@
 # MyPong
 
-A real-time multiplayer Pong game: 1v1 online, matchmaking, tournaments, and AI opponent. Built as a full-stack portfolio project using a microservices architecture.
+A real-time multiplayer Pong game: 1v1 online, matchmaking, and an AI opponent. Built as a full-stack portfolio project using a microservices architecture.
+
+MyPong reimplements the scope of Transcendence, a 42 School capstone project, from scratch — same core requirements (real-time gameplay, JWT auth, microservices), rebuilt with modern tooling and stronger engineering practices (TypeScript throughout, CI/CD, consistent test coverage) than the original assignment required.
+
 
 > **Active development** — see [Phase plan](#phase-plan) below for current status.
 
@@ -19,7 +22,7 @@ A real-time multiplayer Pong game: 1v1 online, matchmaking, tournaments, and AI 
 
 See each service's README for endpoint-level detail and setup.
 
-Tournaments and AI opponent are under construction.
+AI opponent and guest mode are fully implemented. Tournament mode — part of Transcendence's original requirements — was evaluated and intentionally left out of this rebuild's scope; see the note under [Phase plan](#phase-plan).
 
 ---
 
@@ -82,10 +85,12 @@ The frontend (including Public Edge/nginx) runs as a separate job: **lint → ty
 | Phase 2 | user-service + frontend profile + avatar upload (Done)
 | Phase 3 | gateway-ws hub + game-service (physics, session lifecycle, pause/reconnect) + match-service (matchmaking, match lifecycle, stats/history recording) (Done)
 | Phase 4 | Full game frontend: lobby, 3s countdown, live board, pause overlay, result screen (Done)
-| Phase 5 | ai-bot-service + guest mode (Pending)
-| Phase 6 | tournament-service + frontend brackets (Pending)
+| Phase 5 | ai-bot-service + guest mode (Done)
+| Phase 6 | Profile stats frontend, i18n, in-game UX polish (player names during a match) (Pending)
 | Phase 7 | Unit test coverage review across all services (Pending)
 | Phase 8 | Full CI and basic CD + final README (Pending)
+
+tournament-service was fully designed (DB schema + WebSocket contracts) but intentionally left out of this portfolio's scope — the architectural pattern it would demonstrate (a WebSocket-client service with its own database, connected to the gateway) is already fully demonstrated by match-service.
 
 ---
 

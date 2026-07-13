@@ -1,9 +1,5 @@
 name: mypong
 
-# tournament-service and ai-bot-service below have no Dockerfile yet
-# (Fases 5-6) — they're scaffolding for future phases and are intentionally excluded 
-# from the Makefile's SERVICES list, so `make up` never tries to build them.
-
 services:
 
   # ── Public edge ──────────────────────────────────────────────────────────────
@@ -183,20 +179,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
-
-  tournament-service:
-    build:
-      context: .
-      dockerfile: services/tournament-service/Dockerfile
-    environment:
-      GATEWAY_WS_URL: ws://gateway-ws:4500
-      DATABASE_URL: ${DATABASE_URL}
-    networks:
-      - backend-net
-    depends_on:
-      - gateway-ws
-      - postgres
-    # TODO: healthcheck
 
   ai-bot-service:
     build:
