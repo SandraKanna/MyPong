@@ -105,7 +105,6 @@ describe('auth-service routes', () => {
   describe('POST /register', () => {
     it('case 1 — returns 201 with accessToken in body and refreshToken in Set-Cookie', async () => {
       mockQuery
-        .mockResolvedValueOnce(rows([]))            // findUserByEmail → not found
         .mockResolvedValueOnce(rows([MOCK_USER]))   // createUser → new row
         .mockResolvedValueOnce(rows([]));           // saveRefreshToken → ok
 
@@ -131,8 +130,10 @@ describe('auth-service routes', () => {
       expect(cookie!.path).toBe('/api/auth');
     });
 
-    it('case 2 — returns 409 when email is already registered', async () => {
-      mockQuery.mockResolvedValueOnce(rows([MOCK_USER])); // findUserByEmail → found
+    it('case 2 — returns 409 when email is already registered (PG error 23505)', async () => {
+      mockQuery.mockRejectedValueOnce(
+        Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' }),
+      );
 
       const res = await app.inject({
         method: 'POST',
@@ -142,6 +143,18 @@ describe('auth-service routes', () => {
 
       expect(res.statusCode).toBe(409);
       expect(res.json()).toMatchObject({ error: 'Email already registered' });
+    });
+
+    it('returns 500 when createUser fails with a non-uniqueness DB error', async () => {
+      mockQuery.mockRejectedValueOnce(new Error('connection terminated unexpectedly'));
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/register',
+        payload: { email: 'test@example.com', password: 'password123' },
+      });
+
+      expect(res.statusCode).toBe(500);
     });
 
     it('case 3 — returns 400 for invalid input', async () => {
