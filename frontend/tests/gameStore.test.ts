@@ -11,8 +11,11 @@ vi.mock('../src/shared/ws/wsClient', () => ({
   onWsMessage:  vi.fn(() => vi.fn()),
 }));
 
+vi.mock('../src/features/profile/api/profile');
+
 import { disconnectWs, sendWs } from '../src/shared/ws/wsClient';
 import { useAuthStore } from '../src/features/auth/state/authState';
+import { lookupUsernames } from '../src/features/profile/api/profile';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +49,9 @@ beforeEach(() => {
   useGameStore.setState({ phase: 'idle', myUserId: null });
   // Restore authStore to authenticated so subscription tests start from a known state.
   useAuthStore.setState({ status: 'authenticated', accessToken: 'tok', user: null });
+  // Default: no known opponent names — tests that care about the resolved
+  // name override this with mockResolvedValue/mockRejectedValue themselves.
+  vi.mocked(lookupUsernames).mockResolvedValue(new Map());
 });
 
 // ── setConnected ──────────────────────────────────────────────────────────────
@@ -505,5 +511,112 @@ describe('gameStore — authStore logout subscription', () => {
 
     expect(useGameStore.getState().phase).toBe('playing');
     expect(vi.mocked(disconnectWs)).not.toHaveBeenCalled();
+  });
+});
+
+// ── opponentUsername resolution ────────────────────────────────────────────────
+
+describe('opponentUsername resolution', () => {
+  it('sets "Computer" immediately for an AI opponent, without calling lookupUsernames', async () => {
+    useGameStore.getState().setConnected(42);
+    useGameStore.getState().handleMatchMatched(1, { '42': 'left', '0': 'right' }, '2025-01-01T00:00:03Z');
+
+    // No await needed for the AI branch — it never touches the network —
+    // but flushing microtasks confirms lookupUsernames really is never called.
+    await Promise.resolve();
+
+    expect(useGameStore.getState().opponentUsername).toBe('Computer');
+    expect(vi.mocked(lookupUsernames)).not.toHaveBeenCalled();
+  });
+
+  it('resolves a real opponent\'s username via a single batched lookup call', async () => {
+    vi.mocked(lookupUsernames).mockResolvedValue(new Map([[17, 'bob']]));
+    useGameStore.getState().setConnected(42);
+    useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
+
+    await vi.waitFor(() => {
+      expect(useGameStore.getState().opponentUsername).toBe('bob');
+    });
+    expect(vi.mocked(lookupUsernames)).toHaveBeenCalledOnce();
+    expect(vi.mocked(lookupUsernames)).toHaveBeenCalledWith([17]);
+  });
+
+  it('falls back to the raw opponentId when the lookup omits it', async () => {
+    vi.mocked(lookupUsernames).mockResolvedValue(new Map()); // opponent has no profile row
+    useGameStore.getState().setConnected(42);
+    useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
+
+    await vi.waitFor(() => {
+      expect(useGameStore.getState().opponentUsername).toBe('17');
+    });
+  });
+
+  it('falls back to the raw opponentId when the lookup call rejects', async () => {
+    vi.mocked(lookupUsernames).mockRejectedValue(new Error('network error'));
+    useGameStore.getState().setConnected(42);
+    useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
+
+    await vi.waitFor(() => {
+      expect(useGameStore.getState().opponentUsername).toBe('17');
+    });
+  });
+
+  it('carries opponentUsername through matched → playing → paused → ended', async () => {
+    vi.mocked(lookupUsernames).mockResolvedValue(new Map([[17, 'bob']]));
+    useGameStore.getState().setConnected(42);
+    useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
+    await vi.waitFor(() => {
+      expect(useGameStore.getState().opponentUsername).toBe('bob');
+    });
+
+    useGameStore.getState().handleGameState(snapshot(1)); // matched -> playing
+    expect(useGameStore.getState().opponentUsername).toBe('bob');
+
+    useGameStore.getState().handleGamePaused(17, '2025-01-01T00:00:08Z'); // playing -> paused
+    expect(useGameStore.getState().opponentUsername).toBe('bob');
+
+    useGameStore.getState().handleGameResumed(resumedPayload(1)); // paused -> playing
+    expect(useGameStore.getState().opponentUsername).toBe('bob');
+
+    useGameStore.getState().handleGameEnd(42, 'completed', { left: 11, right: 3 }); // -> ended
+    expect(useGameStore.getState().opponentUsername).toBe('bob');
+  });
+
+  it('does not apply a stale lookup result once a new match has replaced the old one', async () => {
+    let resolveFirstLookup: (names: Map<number, string>) => void;
+    vi.mocked(lookupUsernames).mockReturnValueOnce(
+      new Promise((resolve) => { resolveFirstLookup = resolve; }),
+    );
+    useGameStore.getState().setConnected(42);
+    useGameStore.getState().handleMatchMatched(1, PLAYERS, '2025-01-01T00:00:03Z');
+
+    // Before the first match's lookup resolves, that match ends and a new one starts.
+    useGameStore.getState().handleGameEnd(42, 'forfeit', { left: 0, right: 0 });
+    useGameStore.getState().reset();
+    vi.mocked(lookupUsernames).mockResolvedValue(new Map([[99, 'carol']]));
+    useGameStore.getState().setQueued();
+    useGameStore.getState().handleMatchMatched(2, { '42': 'left', '99': 'right' }, '2025-01-01T00:00:10Z');
+
+    await vi.waitFor(() => {
+      expect(useGameStore.getState().opponentUsername).toBe('carol');
+    });
+
+    // The first (now-stale) lookup finally resolves — it must not overwrite carol.
+    resolveFirstLookup!(new Map([[17, 'bob']]));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(useGameStore.getState().opponentUsername).toBe('carol');
+  });
+
+  it('re-resolves opponentUsername on cold-start rehydration (handleGameResumed from idle)', async () => {
+    vi.mocked(lookupUsernames).mockResolvedValue(new Map([[17, 'bob']]));
+    useGameStore.getState().setConnected(42); // 'connected' arrives after reload; opponentUsername was wiped
+
+    useGameStore.getState().handleGameResumed(resumedPayload(1, { '42': 'left', '17': 'right' }));
+
+    await vi.waitFor(() => {
+      expect(useGameStore.getState().opponentUsername).toBe('bob');
+    });
   });
 });

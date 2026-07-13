@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react';
+import { useGameStore } from '../state/gameStore';
+import { useMyDisplayName } from '../../profile/state/profileState';
 
 interface CountdownOverlayProps {
   startsAt: string; // ISO timestamp from match:matched — raw server value, we compute remaining time locally
 }
 
 export default function CountdownOverlay({ startsAt }: CountdownOverlayProps) {
+  const myName = useMyDisplayName();
+  // Falls back to 'Opponent' during the brief window before gameStore's
+  // async lookup resolves (or if it never does — e.g. a network error).
+  const opponentName = useGameStore((s) => s.opponentUsername) ?? 'Opponent';
   // STUDY: useState(() => expr) is the lazy initializer form — the function runs
   // only once on mount to compute the initial value. useState(expr) would re-evaluate
   // expr on every render even though React ignores all but the first result.
@@ -38,9 +44,23 @@ export default function CountdownOverlay({ startsAt }: CountdownOverlayProps) {
   }, [startsAt]);
 
   return (
-    <div className="min-h-screen bg-bg flex flex-col items-center justify-center gap-6">
-      <p className="font-sans text-muted text-lg">Match starting in</p>
-      <p className="font-display text-8xl text-primary">{Math.max(remaining, 0)}</p>
-    </div>
+    // Same viewBox/width/background as GameBoard's <svg> — this occupies the
+    // exact box GameBoard will render into once phase flips to 'playing', so
+    // there's no visual jump: GamePage doesn't wrap either component in a
+    // shared container, it just swaps which one renders into AppLayout's
+    // <main>, so matching GameBoard's own box here is what keeps them aligned.
+    <svg
+      viewBox="0 0 800 600"
+      preserveAspectRatio="xMidYMid meet"
+      width="100%"
+      className="block bg-black"
+    >
+      <text x={400} y={240} textAnchor="middle" fill="#9d8bc4" fontSize={24} fontFamily="system-ui, sans-serif">Match starting in</text>
+      <text x={400} y={280} textAnchor="middle" fill="#f4eeff" fontSize={22} fontFamily="system-ui, sans-serif">{myName} vs {opponentName}</text>
+      {/* Press Start 2P's glyphs sit much closer to the full fontSize in height
+          than a normal typeface (little to no descender) — a much bigger gap
+          than the two lines above need is required to clear its actual ascent. */}
+      <text x={400} y={470} textAnchor="middle" fill="#05d9e8" fontSize={140} fontFamily="'Press Start 2P', monospace">{Math.max(remaining, 0)}</text>
+    </svg>
   );
 }

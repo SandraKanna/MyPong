@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { sendWs } from '../../../shared/ws/wsClient';
 import { useGameStore } from '../state/gameStore';
 import { useWsSession } from '../hooks/useWsSession';
+import { useMyDisplayName } from '../../profile/state/profileState';
 import LobbyView from '../components/LobbyView';
 import CountdownOverlay from '../components/CountdownOverlay';
 import GameBoard from '../components/GameBoard';
@@ -22,6 +23,8 @@ export default function GamePage() {
   // Lives here (not in the store) because it's transient UI state — it clears
   // on the next "Find Match" click and doesn't need to survive navigation.
   const [rejectedMessage, setRejectedMessage] = useState<string | null>(null);
+
+  const myName = useMyDisplayName();
 
   useWsSession({
     onConnected:     (userId) => useGameStore.getState().setConnected(userId),
@@ -62,6 +65,7 @@ export default function GamePage() {
       <LobbyView
         phase={phase}
         rejectedMessage={rejectedMessage}
+        myName={myName}
         onFindMatch={handleFindMatch}
         onCancel={handleCancel}
         onStartAI={handleStartAI}
