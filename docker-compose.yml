@@ -23,7 +23,16 @@ services:
         condition: service_healthy
       gateway-ws:
         condition: service_healthy
-    # TODO: healthcheck
+    healthcheck:
+      # wget can't be used here: nginx's port-80 block always 301s to https, busybox
+      # wget follows that redirect with no way to disable it, and it has no
+      # --no-check-certificate equivalent — so it can never get past the self-signed
+      # cert. curl is already present in nginx:alpine and supports -k for that.
+      test: ["CMD", "curl", "-kfsS", "https://127.0.0.1/", "-o", "/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # ── Gateways (bridge frontend-net ↔ backend-net) ─────────────────────────────
 
@@ -33,12 +42,11 @@ services:
       dockerfile: services/gateway-api/Dockerfile
     expose:
       - "4000"
-    # TODO: remove this ports mapping once nothing hits gateway-api directly —
-    # currently still required by: native Vite dev proxy (/api → :4010 in
-    # vite.config.ts) and the auth-service/gateway-api smoke tests. Revisit in
-    # Fase 7 cleanup pass, or sooner if those paths get rerouted through nginx.
-    ports:
-      - "4010:4000"
+    # Native dev only: needed for the native Vite proxy and this service's
+    # own smoke test [see services/gateway-api/README.md, "Local (native)"].
+    # Commented by default — uncomment while using that flow.
+    # ports:
+    #   - "127.0.0.1:4010:4000"
     environment:
       PORT: "4000"
       JWT_SECRET: ${JWT_SECRET}
@@ -65,9 +73,11 @@ services:
       dockerfile: services/gateway-ws/Dockerfile
     expose:
       - "4500"
-    # TODO: remove this ports mapping once testing via nginx /ws is the only path
-    ports: 
-      - "4500:4500"
+    # Native dev only: needed by gateway-ws's own smoke test, or when
+    # game-service/match-service run natively [see services/gateway-ws/README.md,
+    # "Local (native)"]. Commented by default — uncomment while using that flow.
+    # ports:
+    #   - "127.0.0.1:4500:4500"
     environment:
       PORT: "4500"
       JWT_SECRET: ${JWT_SECRET}
@@ -90,10 +100,11 @@ services:
       dockerfile: services/auth-service/Dockerfile
     expose:
       - "4001" # reachable by other containers on backend-net (e.g. gateway-api)
-    # TODO: remove this ports mapping once gateway-api's native dev flow is
-    # retired (or rerouted through nginx). Nothing else should call this port directly.
-    ports:
-      - "4001:4001"
+    # Native dev only: needed when gateway-api runs outside Docker [see
+    # services/auth-service/README.md, "Local (native)"]. Commented by
+    # default — uncomment while using that flow.
+    # ports:
+    #   - "127.0.0.1:4001:4001"
     environment:
       PORT: "4001"
       DATABASE_URL: ${DATABASE_URL}
