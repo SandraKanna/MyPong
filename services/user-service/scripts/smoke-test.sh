@@ -62,6 +62,21 @@ assert_status() {
   fi
 }
 
+# For cases that need more than a status-code comparison — pass a single
+# already-evaluated boolean condition ("true"/"false") so the case still
+# counts as exactly one pass/fail, not one per sub-check.
+assert() {
+  local name="$1" condition="$2" response_body="${3:-}"
+  if [[ "$condition" == "true" ]]; then
+    echo "[PASS] $name"
+    ((PASS++))
+  else
+    echo "[FAIL] $name"
+    [[ -n "$response_body" ]] && echo "       body: $response_body"
+    ((FAIL++))
+  fi
+}
+
 # ── Setup: register a user to satisfy FK constraint ───────────────────────────
 
 TEST_EMAIL="smoketest_$$@example.com"
@@ -77,7 +92,9 @@ if [[ "$(status "$r")" != "201" ]]; then
   echo "        body: $(body "$r")"
   exit 1
 fi
-USER_ID=$(body "$r" | grep -o '"userId":[0-9]*' | grep -o '[0-9]*')
+# auth-service's /register response is { accessToken } (same shape as /login) —
+# it doesn't return userId, so USER_ID is captured later from the PATCH /me
+# response instead (case 4 below), which already returns it.
 TEST_USERNAME="smokeuser_$$"
 
 r=$(req POST "$BASE_URL/api/auth/login" "{\"email\":\"$TEST_EMAIL\",\"password\":\"$TEST_PASS\"}")
@@ -88,7 +105,7 @@ if [[ "$(status "$r")" != "200" ]]; then
 fi
 ACCESS_TOKEN=$(body "$r" | grep -o '"accessToken":"[^"]*"' | grep -o '"[^"]*"$' | tr -d '"')
 
-echo "  test user registered — userId=$USER_ID"
+echo "  test user registered"
 echo "  access token obtained"
 echo ""
 
@@ -109,6 +126,11 @@ assert_status "GET /me — profile not found (404)" "404" "$(status "$r")" "$(bo
 # 4. PATCH /me → 200 (creates profile)
 r=$(req PATCH "$BASE_URL/api/users/me" "{\"username\":\"$TEST_USERNAME\"}" "Authorization: Bearer $ACCESS_TOKEN")
 assert_status "PATCH /me — create profile (200)" "200" "$(status "$r")" "$(body "$r")"
+# Response body is { userId, username, avatar_url } — same shape as GET /me.
+# Captured here (not from /register, which no longer returns userId) for the
+# id-scoped cases below (:id/stats, :id/matches, the batch lookup).
+USER_ID=$(body "$r" | grep -o '"userId":[0-9]*' | grep -o '[0-9]*')
+echo "  userId=$USER_ID"
 
 # 5. GET /me → 200 (profile now exists)
 r=$(req GET "$BASE_URL/api/users/me" "" "Authorization: Bearer $ACCESS_TOKEN")
@@ -137,6 +159,16 @@ assert_status "GET /:id/stats — non-numeric id (deny 400)" "400" "$(status "$r
 # 11. DENY: GET /:id/stats — no Authorization header → 401
 r=$(req GET "$BASE_URL/api/users/$USER_ID/stats")
 assert_status "GET /:id/stats — no Authorization header (deny 401)" "401" "$(status "$r")" "$(body "$r")"
+
+# 12. GET /?ids=... — batch lookup: 200, own id present in the body, unknown id (999999) omitted
+r=$(req GET "$BASE_URL/api/users?ids=$USER_ID,999999" "" "Authorization: Bearer $ACCESS_TOKEN")
+RESULT="false"
+if [[ "$(status "$r")" == "200" ]] \
+  && echo "$(body "$r")" | grep -q "\"userId\":$USER_ID" \
+  && ! echo "$(body "$r")" | grep -q "999999"; then
+  RESULT="true"
+fi
+assert "GET /?ids= — 200, own id present, unknown id 999999 omitted" "$RESULT" "$(body "$r")"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 

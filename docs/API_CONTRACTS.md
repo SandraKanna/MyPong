@@ -65,7 +65,13 @@ This endpoint is intentionally idempotent: it always returns `204` regardless of
 
 Base path: `/api/users/*` (JWT required — gateway-api validates the Bearer token and injects `x-user-id`; user-service never decodes JWTs directly).
 
-**Auth guard**: all five endpoints below return `401 { error: 'Missing or invalid user identity' }` if the `x-user-id` header is absent or non-numeric. This is not repeated per-endpoint.
+**Auth guard**: all six endpoints below return `401 { error: 'Missing or invalid user identity' }` if the `x-user-id` header is absent or non-numeric. This is not repeated per-endpoint.
+
+### GET /api/users?ids=1,2,3
+
+No body. `ids` is a required, comma-separated list of positive integers — at least 1, at most 50.
+Response `200`: `{ users: { userId: number, username: string, avatar_url: string | null }[] }` — same per-user shape as `GET /me`. Any requested id with no matching user, or a user with no profile row yet, is silently omitted from `users`; this is not an error, same treatment as `GET /:id/stats` returning zeroed defaults instead of a `404`. Order of `users` is not guaranteed to match the order of `ids`.
+Response `400`: `{ error: 'Invalid input', details: { ids: string[] } }` — Zod validation failure: `ids` missing/empty, a non-numeric or non-positive segment, or more than 50 ids.
 
 ### GET /api/users/me
 
