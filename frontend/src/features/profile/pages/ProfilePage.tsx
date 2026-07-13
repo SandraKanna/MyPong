@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { getProfile, patchProfile, uploadAvatar } from '../api/profile';
+import { useProfileStore } from '../state/profileState';
 
 // STUDY: A discriminated union (tagged by `phase`) models the page lifecycle
 // explicitly. TypeScript narrows the type when you check `pageState.phase`,
@@ -77,6 +78,9 @@ export default function ProfilePage() {
       // If the server normalizes the value (e.g., trims whitespace) the input
       // reflects the actual saved value rather than what the user typed.
       setDraft(profile.username);
+      // Lifts ProtectedRoute's gameplay gate immediately — without this, the
+      // gate would keep redirecting to /profile until its own next check.
+      useProfileStore.getState().markUsernameSet();
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Failed to save');
     } finally {
@@ -123,7 +127,9 @@ export default function ProfilePage() {
         {isNew ? 'Set up your profile' : 'Your profile'}
       </h1>
       {isNew && (
-        <p className="font-sans text-muted">You haven&apos;t set a username yet.</p>
+        <p className="font-sans text-muted">
+          You haven&apos;t set a username yet — finish setting up your profile before you can play.
+        </p>
       )}
       {/* STUDY: Avatar UI is gated on !isNew because avatar upload requires a
           profile row to already exist (the backend enforces this via 422). Showing
