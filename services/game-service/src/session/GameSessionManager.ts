@@ -1,7 +1,10 @@
-import type { WsEnvelope } from '@mypong/types';
+import type { WsEnvelope, MatchRejectionReason } from '@mypong/types';
 import { Game } from '../physics/game';
 import { DEFAULT_PHYSICS_CONFIG, type PhysicsConfig } from '../physics/physicsConfig';
 import { AI_BOT_USER_ID } from './constants';
+
+// Shared by both already-in-a-match rejection checks in handleStartAI.
+const ALREADY_IN_MATCH_MESSAGE = 'You are already in a match.';
 
 // TUNE: PvE-only ball speed for easy — gives the human more time to recover from an extreme paddle position on serve.
 const EASY_BALL_SPEED   = 6;
@@ -168,13 +171,13 @@ export class GameSessionManager {
     // Reject if user already has an active or pending session (PvP or PvE).
     for (const session of this.sessions.values()) {
       if (session.players.has(userId)) {
-        this.send({ type: 'match:rejected', to: [userId], payload: { reason: 'already_in_session', message: 'You are already in a match.' } });
+        this.send({ type: 'match:rejected', to: [userId], payload: { reason: 'already_in_match', message: ALREADY_IN_MATCH_MESSAGE } satisfies { reason: MatchRejectionReason; message: string } });
         return;
       }
     }
     for (const pending of this.pendingMatchIds.values()) {
       if (pending.userIds.includes(userId)) {
-        this.send({ type: 'match:rejected', to: [userId], payload: { reason: 'already_in_session', message: 'You are already in a match.' } });
+        this.send({ type: 'match:rejected', to: [userId], payload: { reason: 'already_in_match', message: ALREADY_IN_MATCH_MESSAGE } satisfies { reason: MatchRejectionReason; message: string } });
         return;
       }
     }

@@ -648,6 +648,8 @@ describe('GameSessionManager', () => {
     const rejection = sent.find((m) => m.type === 'match:rejected');
     expect(rejection).toBeDefined();
     expect(rejection!.to).toEqual([42]);
+    expect((rejection!.payload as { reason: string; message: string }).reason).toBe('already_in_match');
+    expect((rejection!.payload as { reason: string; message: string }).message).toBe('You are already in a match.');
     expect(manager.sessionCount()).toBe(1); // original PvP session unchanged
   });
 
@@ -662,6 +664,8 @@ describe('GameSessionManager', () => {
     const rejection = sent.find((m) => m.type === 'match:rejected');
     expect(rejection).toBeDefined();
     expect(rejection!.to).toEqual([42]);
+    expect((rejection!.payload as { reason: string; message: string }).reason).toBe('already_in_match');
+    expect((rejection!.payload as { reason: string; message: string }).message).toBe('You are already in a match.');
   });
 
   it('handleStartAI rejects if user already has an active PvE session', () => {
@@ -675,6 +679,8 @@ describe('GameSessionManager', () => {
     const rejection = sent.find((m) => m.type === 'match:rejected');
     expect(rejection).toBeDefined();
     expect(rejection!.to).toEqual([42]);
+    expect((rejection!.payload as { reason: string; message: string }).reason).toBe('already_in_match');
+    expect((rejection!.payload as { reason: string; message: string }).message).toBe('You are already in a match.');
     expect(manager.sessionCount()).toBe(1); // original PvE session unchanged
   });
 
