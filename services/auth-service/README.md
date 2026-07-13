@@ -6,7 +6,7 @@ Handles registration, login, token refresh, and logout. Issues short-lived JWT a
 
 | Method   | Path        | Description                                     |
 |----------|-------------|-------------------------------------------------|
-| `POST`   | `/register` | Create account — email + password (argon2 hash) |
+| `POST`   | `/register` | Create account — email + password (argon2 hash); returns access token in body, refresh token as httpOnly cookie, same as `/login` |
 | `POST`   | `/login`    | Returns access token in body; refresh token as httpOnly cookie  |
 | `POST`   | `/refresh`  | Returns new access token in body, rotates refresh cookie        |
 | `DELETE` | `/session`  | Revokes refresh token (logout)                  |

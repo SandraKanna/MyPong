@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { FastifyPluginCallback } from 'fastify';
+import { FastifyPluginCallback, FastifyReply } from 'fastify';
 import * as authService from '../services/auth.service';
 import {
   registerSchema,
@@ -23,6 +23,25 @@ function fieldErrors(error: z.ZodError): Record<string, string[]> {
 
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+// Shared by /register and /login: both hand back a fresh access token in the
+// body and a rotated refresh cookie — issuing an account should leave the
+// caller logged in exactly the same way as authenticating into one.
+async function issueSession(reply: FastifyReply, userId: number): Promise<{ accessToken: string }> {
+  const accessToken = authService.generateAccessToken(userId);
+  const { token: refreshToken, jti } = authService.generateRefreshToken(userId);
+  await authService.saveRefreshToken(userId, jti, new Date(Date.now() + REFRESH_TOKEN_TTL_MS));
+
+  reply.setCookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/api/auth',
+    maxAge: 7 * 24 * 60 * 60,
+  });
+
+  return { accessToken };
+}
+
 export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   fastify.post('/register', async (request, reply) => {
@@ -41,7 +60,8 @@ export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     const passwordHash = await authService.hashPassword(password);
     const user = await authService.createUser(email, passwordHash);
 
-    return reply.status(201).send({ userId: user.id, email: user.email });
+    const session = await issueSession(reply, user.id);
+    return reply.status(201).send(session);
   });
 
 
@@ -59,18 +79,8 @@ export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
 
-    const accessToken = authService.generateAccessToken(user.id);
-    const { token: refreshToken, jti } = authService.generateRefreshToken(user.id);
-    await authService.saveRefreshToken(user.id, jti, new Date(Date.now() + REFRESH_TOKEN_TTL_MS));
-
-    reply.setCookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/api/auth',
-      maxAge: 7 * 24 * 60 * 60,
-    });
-    return reply.send({ accessToken });
+    const session = await issueSession(reply, user.id);
+    return reply.send(session);
   });
 
 

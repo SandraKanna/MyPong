@@ -8,6 +8,7 @@ import HomePage from './features/home/pages/HomePage';
 import ProfilePage from './features/profile/pages/ProfilePage';
 import GamePage from './features/game/pages/GamePage';
 import ProtectedRoute from './shared/routes/ProtectedRoute';
+import PublicOnlyRoute from './shared/routes/PublicOnlyRoute';
 
 // STUDY: useBootstrapAuth fires a /refresh call on every page load. If the
 // httpOnly cookie is valid, it restores the access token silently. If not,
@@ -19,13 +20,18 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* STUDY: PublicLayout and ProtectedRoute are "layout routes" — they
-            wrap child routes without having a path themselves. React Router
-            renders the matching child into their <Outlet />. */}
+        {/* STUDY: PublicLayout, PublicOnlyRoute, and ProtectedRoute are all
+            "layout routes" — they wrap child routes without having a path
+            themselves. React Router renders the matching child into their
+            <Outlet />. PublicOnlyRoute nests inside PublicLayout so a real
+            (non-guest) authenticated user hitting one of these URLs directly
+            gets bounced to /game instead of seeing the guest-facing pages. */}
         <Route element={<PublicLayout />}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route element={<PublicOnlyRoute />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+          </Route>
         </Route>
 
         {/* STUDY: ProtectedRoute is the security boundary. Every route nested

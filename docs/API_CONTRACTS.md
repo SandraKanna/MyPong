@@ -20,9 +20,11 @@ Base path: `/api/auth/*` (public, no JWT required).
 ### POST /api/auth/register
 
 Request: `{ email: string, password: string }` — password must be at least 8 characters.
-Response `201`: `{ userId: number, email: string }`
+Response `201`: `{ accessToken: string }`
 Response `400`: `{ error: 'Invalid input', details: { email?: string[], password?: string[] } }` — Zod validation failure (malformed email, password under 8 chars, missing fields).
 Response `409`: `{ error: 'Email already registered' }`
+
+Also sets the refresh token as an httpOnly cookie — same response shape and cookie behavior as `/login`, since a successful registration logs the user in immediately.
 
 ### POST /api/auth/login
 

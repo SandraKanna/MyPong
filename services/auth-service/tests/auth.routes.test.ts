@@ -103,10 +103,11 @@ describe('auth-service routes', () => {
   // ── POST /register ──────────────────────────────────────────────────────────
 
   describe('POST /register', () => {
-    it('case 1 — returns 201 and userId for a new user', async () => {
+    it('case 1 — returns 201 with accessToken in body and refreshToken in Set-Cookie', async () => {
       mockQuery
-        .mockResolvedValueOnce(rows([]))           // findUserByEmail → not found
-        .mockResolvedValueOnce(rows([MOCK_USER])); // createUser → new row
+        .mockResolvedValueOnce(rows([]))            // findUserByEmail → not found
+        .mockResolvedValueOnce(rows([MOCK_USER]))   // createUser → new row
+        .mockResolvedValueOnce(rows([]));           // saveRefreshToken → ok
 
       const res = await app.inject({
         method: 'POST',
@@ -115,7 +116,19 @@ describe('auth-service routes', () => {
       });
 
       expect(res.statusCode).toBe(201);
-      expect(res.json()).toMatchObject({ userId: 1, email: 'test@example.com' });
+      const body = res.json();
+      expect(body).toHaveProperty('accessToken');
+      expect(typeof body.accessToken).toBe('string');
+      expect(body).not.toHaveProperty('userId');
+      expect(body).not.toHaveProperty('email');
+      expect(body).not.toHaveProperty('refreshToken');
+
+      const cookie = res.cookies.find(c => c.name === 'refreshToken');
+      expect(cookie).toBeDefined();
+      expect(typeof cookie!.value).toBe('string');
+      expect(cookie!.httpOnly).toBe(true);
+      expect(cookie!.sameSite).toBe('Strict');
+      expect(cookie!.path).toBe('/api/auth');
     });
 
     it('case 2 — returns 409 when email is already registered', async () => {
