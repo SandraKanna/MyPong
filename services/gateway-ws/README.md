@@ -18,8 +18,19 @@ If authentication fails, the server closes the socket with one of these codes (a
 |------|--------|
 | `4001` | Unauthorized — token missing, invalid, expired, wrong type, or 5s timeout exceeded without sending an auth message |
 | `4003` | Bad Request — first message is not valid JSON, or does not have the required `{ type, payload.token }` shape |
+| `4009` | Session Replaced — a newer browser connection authenticated with the same `userId` (see "Single session per user" below) |
 
 The `type` claim in the token is verified in addition to the signature — a refresh token is rejected even if the secret matches, as a defense against misconfiguration.
+
+## Single session per user
+
+gateway-ws maintains one browser socket per `userId`. When a second browser connection authenticates with a `userId` that already has one, the previous connection is closed with code `4009` (reason: `"Session replaced by a newer connection"`) before the new one is registered — there is no window where the `userId` has neither a valid old nor new entry, since both the close and the registration happen synchronously within the same message handler.
+
+`player:disconnect` for the replaced session is broadcast to all registered services immediately, at replacement time — not deferred until the old socket's own `close` event fires. That event is asynchronous and could otherwise arrive after the new session's `player:connect` broadcast, and services would see a connect before its matching disconnect. In particular, game-service's reconnect handling only resumes a session that is already marked disconnected for that `userId`; a `player:connect` with nothing to resume is a no-op, and a `player:disconnect` arriving afterward would then pause (or, in PvE, silently tear down with no `game:end`) a session that actually has a live browser attached, with no further event to ever recover it. Enforcing disconnect-before-connect ordering here means the replaced session flows through the exact same grace-window/forfeit/queue-removal handling any other disconnect gets — no special-casing needed downstream.
+
+When the old socket's own `close` event does eventually fire, it checks whether the `userId` entry in the connection map still points at that same socket before doing anything — since the replacement above already reassigned the entry to the new socket, this check fails and the handler is a no-op (no deleting the new session's entry, no re-broadcasting an already-handled disconnect).
+
+This differs from the service-registration path below, which still silently orphans a superseded socket without closing it — see the Gotchas section.
 
 ## Internal service connection
 

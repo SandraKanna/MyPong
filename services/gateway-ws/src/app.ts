@@ -7,8 +7,13 @@ import type { WsEnvelope } from '@mypong/types';
 // 4000-4999 are application-reserved close codes per RFC 6455.
 // 4001 = Unauthorized (bad/missing/wrong-type token, or auth timeout).
 // 4003 = Bad Request (first message is not valid JSON or missing required fields).
-const CLOSE_UNAUTHORIZED = 4001;
-const CLOSE_BAD_REQUEST  = 4003;
+// 4009 = Session Replaced (a newer browser connection authenticated with the
+// same userId — see the single-session replacement logic below). Duplicated
+// as a matching constant in frontend/src/shared/ws/wsClient.ts since there is
+// no shared runtime package between the two — @mypong/types is type-only.
+const CLOSE_UNAUTHORIZED     = 4001;
+const CLOSE_BAD_REQUEST      = 4003;
+const CLOSE_SESSION_REPLACED = 4009;
 
 // Service names allowed to register. Extend when new WS-client services land.
 const KNOWN_SERVICES = new Set(['game-service', 'match-service', 'user-service', 'ai-bot-service', 'test-service']); // 'test-service' is reserved for smoke tests — never a real container; registration still requires INTERNAL_SERVICE_SECRET
@@ -155,6 +160,31 @@ export function buildServer(opts: BuildServerOptions = {}): ServerInstance {
         }
 
         const userId = Number(decoded['sub']);
+
+        // Single-session enforcement: a second browser authenticating with the
+        // same userId (e.g. the same account logged in in two tabs) replaces
+        // the previous connection rather than silently overwriting the Map
+        // entry and leaving the old socket open but unrouted forever.
+        const previous = browsers.get(userId);
+        if (previous) {
+          previous.close(CLOSE_SESSION_REPLACED, 'Session replaced by a newer connection');
+          // Broadcast the disconnect now, synchronously, instead of waiting for
+          // the old socket's own 'close' event — that event fires asynchronously
+          // and could otherwise arrive after the player:connect broadcast below,
+          // so services would see a connect before the matching disconnect. For
+          // an in-progress match, game-service's handlePlayerConnect only acts
+          // when a session is already marked disconnected for that userId; if
+          // connect arrives first it's a no-op, and the later disconnect then
+          // pauses (or, in PvE, silently tears down) a session that actually has
+          // a live browser attached, with no further event to ever resume it.
+          // The old socket's real close handler below (identity-checked) will
+          // see this userId's Map entry already points elsewhere and skip
+          // re-announcing the disconnect.
+          for (const svc of services.values()) {
+            svc.send(JSON.stringify({ type: 'player:disconnect', userId }));
+          }
+        }
+
         browsers.set(userId, socket);
         socket.send(JSON.stringify({ type: 'connected', payload: { userId: decoded['sub'] } }));
 
@@ -178,6 +208,11 @@ export function buildServer(opts: BuildServerOptions = {}): ServerInstance {
         });
 
         socket.on('close', () => {
+          // If this userId's Map entry no longer points at this socket, a newer
+          // connection already replaced it (and already broadcast the disconnect
+          // for this one above) — deleting here would erase the newer session's
+          // entry, and re-broadcasting would send a redundant disconnect.
+          if (browsers.get(userId) !== socket) return;
           browsers.delete(userId);
           for (const svc of services.values()) {
             svc.send(JSON.stringify({ type: 'player:disconnect', userId }));
