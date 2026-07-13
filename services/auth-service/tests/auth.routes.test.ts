@@ -165,6 +165,7 @@ describe('auth-service routes', () => {
     it('case 4 — returns 200 with accessToken in body and refreshToken in Set-Cookie', async () => {
       mockQuery
         .mockResolvedValueOnce(rows([MOCK_USER])) // findUserByEmail → found
+        .mockResolvedValueOnce(rows([]))           // revokeAllRefreshTokensForUser → ok
         .mockResolvedValueOnce(rows([]));          // saveRefreshToken → ok
       mockVerify.mockResolvedValueOnce(true);
 
@@ -186,6 +187,46 @@ describe('auth-service routes', () => {
       expect(cookie!.httpOnly).toBe(true);
       expect(cookie!.sameSite).toBe('Strict');
       expect(cookie!.path).toBe('/api/auth');
+    });
+
+    it('a second login for the same user_id revokes the first session\'s refresh token row', async () => {
+      // db.query is mocked (no real persistence), so "revokes the first
+      // session's row" is verified by asserting the second login issues the
+      // bulk-revoke query scoped to this user_id, immediately after
+      // findUserByEmail and before the new token is saved — the same
+      // statement that, against a real database, would revoke the row the
+      // first login inserted.
+      mockQuery
+        .mockResolvedValueOnce(rows([MOCK_USER])) // findUserByEmail (1st login) → found
+        .mockResolvedValueOnce(rows([]))           // revokeAllRefreshTokensForUser (1st login) → ok, nothing active yet
+        .mockResolvedValueOnce(rows([]));          // saveRefreshToken (1st login) → ok
+      mockVerify.mockResolvedValueOnce(true);
+
+      await app.inject({
+        method: 'POST',
+        url: '/login',
+        payload: { email: 'test@example.com', password: 'password123' },
+      });
+
+      mockQuery.mockClear();
+      mockQuery
+        .mockResolvedValueOnce(rows([MOCK_USER])) // findUserByEmail (2nd login) → found
+        .mockResolvedValueOnce(rows([]))           // revokeAllRefreshTokensForUser (2nd login) → revokes the 1st login's row
+        .mockResolvedValueOnce(rows([]));          // saveRefreshToken (2nd login) → ok
+      mockVerify.mockResolvedValueOnce(true);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/login',
+        payload: { email: 'test@example.com', password: 'password123' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(mockQuery).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL'),
+        [MOCK_USER.id],
+      );
     });
 
     it('case 5 — returns 401 with same message for wrong password (no user enumeration)', async () => {

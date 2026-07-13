@@ -125,3 +125,16 @@ export async function revokeRefreshToken(jti: string): Promise<void> {
     [jti]
   );
 }
+
+// Revokes every currently-active refresh token for a user in one statement —
+// used on login to end any other session for the same account, rather than
+// letting an old session's access token keep working (and its refresh token
+// keep renewing it) for up to 15 more minutes after a new login elsewhere.
+// Already-revoked rows are left untouched, so this is safe to call even when
+// there is nothing to revoke.
+export async function revokeAllRefreshTokensForUser(userId: number): Promise<void> {
+  await db.query(
+    'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
+    [userId]
+  );
+}

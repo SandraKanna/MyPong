@@ -79,6 +79,12 @@ export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
 
+    // Enforces a single active session per account: any refresh token issued
+    // by a previous login is revoked here, before the new one is issued below.
+    // Only /login does this — /register has no prior session to revoke, and
+    // /guest never issues a refresh token in the first place.
+    await authService.revokeAllRefreshTokensForUser(user.id);
+
     const session = await issueSession(reply, user.id);
     return reply.send(session);
   });
