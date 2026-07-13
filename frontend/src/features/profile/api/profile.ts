@@ -1,4 +1,4 @@
-import { apiClient } from '../../../shared/api/httpClient';
+import { apiClient, readErrorMessage } from '../../../shared/api/httpClient';
 
 export interface UserProfile {
   userId: number;
@@ -54,12 +54,8 @@ export async function getProfile(): Promise<UserProfile | null> {
   const res = await apiClient('/api/users/me');
   if (res.status === 404) return null;
   if (!res.ok) {
-    // STUDY: .catch(() => ({})) makes the JSON parse safe — if the error body
-    // is not valid JSON (e.g., an nginx HTML error page) we still get an object
-    // we can safely destructure. Without it, a malformed body would throw and
-    // obscure the original error with a JSON parse error.
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? 'Failed to load profile');
+    const message = await readErrorMessage(res, 'Failed to load profile');
+    throw new Error(message);
   }
   return res.json() as Promise<UserProfile>;
 }
@@ -74,8 +70,8 @@ export async function patchProfile(username: string): Promise<UserProfile> {
     body: JSON.stringify({ username }),
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? 'Failed to save profile');
+    const message = await readErrorMessage(res, 'Failed to save profile');
+    throw new Error(message);
   }
   return res.json() as Promise<UserProfile>;
 }
@@ -93,8 +89,8 @@ export async function uploadAvatar(file: File): Promise<UserProfile> {
     body: form,
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? 'Failed to upload avatar');
+    const message = await readErrorMessage(res, 'Failed to upload avatar');
+    throw new Error(message);
   }
   return res.json() as Promise<UserProfile>;
 }
@@ -102,8 +98,8 @@ export async function uploadAvatar(file: File): Promise<UserProfile> {
 export async function getStats(userId: number): Promise<UserStats> {
   const res = await apiClient(`/api/users/${userId.toString()}/stats`);
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? 'Failed to load stats');
+    const message = await readErrorMessage(res, 'Failed to load stats');
+    throw new Error(message);
   }
   return res.json() as Promise<UserStats>;
 }
@@ -117,8 +113,8 @@ export async function getMatches(
     `/api/users/${userId.toString()}/matches?limit=${limit.toString()}&offset=${offset.toString()}`,
   );
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? 'Failed to load match history');
+    const message = await readErrorMessage(res, 'Failed to load match history');
+    throw new Error(message);
   }
   return res.json() as Promise<MatchHistoryPage>;
 }
@@ -135,8 +131,8 @@ export async function getMatches(
 export async function lookupUsernames(ids: number[]): Promise<Map<number, string>> {
   const res = await apiClient(`/api/users?ids=${ids.join(',')}`);
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? 'Failed to look up usernames');
+    const message = await readErrorMessage(res, 'Failed to look up usernames');
+    throw new Error(message);
   }
   const { users } = (await res.json()) as { users: UserProfile[] };
   return new Map(users.map((u) => [u.userId, u.username]));
