@@ -67,7 +67,7 @@ export default function ProfilePage() {
       setDraft(profile.username); // reflect the server's saved value (e.g. trimmed), not what the user typed
       useProfileStore.getState().markUsernameSet(profile.username); // marks the username as set immediately, rather than waiting on the store's own next check
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : 'Failed to save');
+      setSaveError(e instanceof Error ? e.message : 'Failed to save profile');
     } finally {
       setSaving(false);
     }

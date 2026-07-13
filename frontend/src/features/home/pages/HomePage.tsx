@@ -108,7 +108,7 @@ function GuestMatchView({ onExit }: { onExit: () => void }) {
         <BoardPreview />
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/70">
           <p className="font-display text-primary text-3xl uppercase tracking-widest">
-            {won ? 'You Win' : 'You Lose'}
+            {won ? 'You win!' : 'You lose.'}
           </p>
           <button
             onClick={onExit}
