@@ -328,4 +328,120 @@ describe('user-service routes', () => {
       expect(res.json()).toMatchObject({ error: 'Missing or invalid user identity' });
     });
   });
+
+  // ── GET / (batch lookup) ─────────────────────────────────────────────────────
+
+  describe('GET /', () => {
+    it('returns 200 with users mapped from matching profile rows', async () => {
+      mockQuery.mockResolvedValueOnce(rows([
+        { user_id: 1, username: 'alice', avatar_url: null },
+        { user_id: 2, username: 'bob', avatar_url: '/avatars/2.webp' },
+      ]));
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/?ids=1,2,3',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({
+        users: [
+          { userId: 1, username: 'alice', avatar_url: null },
+          { userId: 2, username: 'bob', avatar_url: '/avatars/2.webp' },
+        ],
+      });
+      // id 3 has no matching row and is silently omitted — not asserted as an
+      // error, just absent from the response above.
+      expect(mockQuery).toHaveBeenCalledWith(expect.any(String), [[1, 2, 3]]);
+    });
+
+    it('returns an empty users array when none of the ids match a profile', async () => {
+      mockQuery.mockResolvedValueOnce(rows([]));
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/?ids=99',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ users: [] });
+    });
+
+    it('returns 400 for a non-numeric id', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/?ids=1,abc,2',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('Invalid input');
+    });
+
+    it('returns 400 for a negative id', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/?ids=1,-2',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('Invalid input');
+    });
+
+    it('returns 400 for id = 0', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/?ids=0',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('Invalid input');
+    });
+
+    it('returns 400 for an empty ids value', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/?ids=',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('Invalid input');
+    });
+
+    it('returns 400 when ids is missing entirely', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('Invalid input');
+    });
+
+    it('returns 400 when more than 50 ids are provided', async () => {
+      const ids = Array.from({ length: 51 }, (_, i) => i + 1).join(',');
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/?ids=${ids}`,
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('Invalid input');
+    });
+
+    it('returns 401 when x-user-id is missing', async () => {
+      const res = await app.inject({ method: 'GET', url: '/?ids=1,2' });
+
+      expect(res.statusCode).toBe(401);
+      expect(res.json()).toMatchObject({ error: 'Missing or invalid user identity' });
+    });
+  });
 });

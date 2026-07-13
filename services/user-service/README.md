@@ -8,13 +8,14 @@ Manages user profiles, avatar uploads, and match statistics. It's mostly a REST 
 All paths below are relative to `/api/users/*`, since gateway-api proxies everything under that prefix. Clients authenticate with a normal `Authorization: Bearer <access_token>` header, same as any other protected route. gateway-api validates that token and then talks to user-service internally over `x-user-id` — user-service itself never sees or decodes the JWT, it just trusts that header.
 
 
-| Method   | Path            | Auth required | Description                                                       |
-|----------|-----------------|---------------|-------------------------------------------------------------------|
-| `GET`    | `/me`           | Yes           | Returns own profile; `404` if no profile row yet                  |
-| `PATCH`  | `/me`           | Yes           | Creates or updates username (first call creates the profile row)  |
-| `POST`   | `/me/avatar`    | Yes           | Multipart upload; resizes to 512×512 WebP; requires prior PATCH   |
-| `GET`    | `/:id/stats`    | Yes           | Any user's stats; returns zeroed defaults if no matches recorded  |
-| `GET`    | `/:id/matches`  | Yes           | Any user's match history; `?limit=` (max 50) `?offset=` (default 20/0) |
+| Method   | Path            | Auth required | Description                                                       
+|----------|-----------------|---------------|-------------------------------------------------------------------
+| `GET`    | `/?ids=1,2,3`   | Yes           | Batch profile lookup (max 50 ids); unknown/profile-less ids silently omitted 
+| `GET`    | `/me`           | Yes           | Returns own profile; `404` if no profile row yet                  
+| `PATCH`  | `/me`           | Yes           | Creates or updates username (first call creates the profile row)  
+| `POST`   | `/me/avatar`    | Yes           | Multipart upload; resizes to 512×512 WebP; requires prior PATCH   
+| `GET`    | `/:id/stats`    | Yes           | Any user's stats; returns zeroed defaults if no matches recorded  
+| `GET`    | `/:id/matches`  | Yes           | Any user's match history; `?limit=` (max 50) `?offset=` (default 20/0)
 
 ## Environment variables
 
@@ -73,4 +74,4 @@ cd services/user-service
 ./scripts/smoke-test.sh http://localhost:4010   # explicit
 ```
 
-11 cases in total: two deny cases for missing `Authorization` headers on `/me`, the profile lifecycle (404 before a username is set, then PATCH, then a successful 200), an invalid-username rejection, zeroed stats for a user with no matches, an empty match history, a rejected `limit=51` (over the max), a rejected non-numeric `:id`, and one more deny case confirming `/:id/stats` also requires a token.
+12 cases in total: two deny cases for missing `Authorization` headers on `/me`, the profile lifecycle (404 before a username is set, then PATCH, then a successful 200), an invalid-username rejection, zeroed stats for a user with no matches, an empty match history, a rejected `limit=51` (over the max), a rejected non-numeric `:id`, one more deny case confirming `/:id/stats` also requires a token, and a batch lookup (`GET /?ids=...`) confirming the caller's own id comes back and an unknown id is silently omitted.

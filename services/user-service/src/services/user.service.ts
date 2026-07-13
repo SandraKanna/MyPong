@@ -14,6 +14,19 @@ export async function findProfile(userId: number): Promise<UserProfile | null> {
   return rows[0] ?? null;
 }
 
+// STUDY: ids with no matching row (unknown user, or a user with no profile
+// row yet) are simply absent from the result — ANY($1) is a plain WHERE
+// filter, not a per-id lookup, so there's nothing to "not find" and map to
+// null. The caller doesn't need to reconcile the input list against the
+// output; it just uses whatever rows come back.
+export async function findProfilesByIds(ids: number[]): Promise<UserProfile[]> {
+  const { rows } = await db.query<UserProfile>(
+    'SELECT * FROM user_profiles WHERE user_id = ANY($1) AND username IS NOT NULL',
+    [ids],
+  );
+  return rows;
+}
+
 // INSERT ... ON CONFLICT (user_id) handles both first-time creation and updates.
 // If the username UNIQUE constraint fires (a different user already has it),
 // Postgres throws error code 23505 — the route handler catches it and returns 409.

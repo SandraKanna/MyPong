@@ -6,7 +6,7 @@ import '@fastify/multipart'; // pulls in type augmentation for request.file()
 import sharp from 'sharp';
 import * as userService from '../services/user.service';
 import * as statsService from '../services/stats.service';
-import { patchMeSchema } from '../schemas/user.schemas';
+import { patchMeSchema, userLookupQuerySchema } from '../schemas/user.schemas';
 import { getUserId } from '../lib/getUserId';
 import { detectImageType } from '../lib/detectImageType';
 import { config } from '../config';
@@ -27,6 +27,31 @@ function fieldErrors(error: z.ZodError): Record<string, string[]> {
 }
 
 export const userRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
+
+  // STUDY: Registered at the root ('/'), the same no-prefix style as every
+  // other route in this plugin — gateway-api strips '/api/users' before
+  // proxying. No conflict with '/:id/stats' or '/:id/matches' below: those
+  // require a literal segment after the id, this route has zero segments.
+  fastify.get('/', async (request, reply) => {
+    const callerId = getUserId(request);
+    if (callerId === null) {
+      return reply.status(401).send({ error: 'Missing or invalid user identity' });
+    }
+
+    const result = userLookupQuerySchema.safeParse(request.query);
+    if (!result.success) {
+      return reply.status(400).send({ error: 'Invalid input', details: fieldErrors(result.error) });
+    }
+
+    const profiles = await userService.findProfilesByIds(result.data.ids);
+    return reply.status(200).send({
+      users: profiles.map((profile) => ({
+        userId: profile.user_id,
+        username: profile.username,
+        avatar_url: profile.avatar_url,
+      })),
+    });
+  });
 
   fastify.get('/me', async (request, reply) => {
     const userId = getUserId(request);
