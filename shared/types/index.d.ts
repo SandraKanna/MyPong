@@ -7,3 +7,6 @@ export interface WsEnvelope {
   token?: string;    // present only on service:register
   payload?: unknown;
 }
+
+// Canonical reason codes for match:rejected across match-service and game-service.
+export type MatchRejectionReason = 'already_in_match' | 'guest_not_allowed';

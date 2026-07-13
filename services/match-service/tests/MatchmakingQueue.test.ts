@@ -128,10 +128,11 @@ describe('MatchmakingQueue', () => {
     await queue.handleJoin(42);
 
     expect(sent).toHaveLength(1);
-    const rejected = sent[0] as { type: string; to: number[]; payload: { reason: string } };
+    const rejected = sent[0] as { type: string; to: number[]; payload: { reason: string; message: string } };
     expect(rejected.type).toBe('match:rejected');
     expect(rejected.to).toEqual([42]);
     expect(rejected.payload.reason).toBe('already_in_match');
+    expect(rejected.payload.message).toBe('You are already in a match.');
     expect(queue.queueLength()).toBe(0);
   });
 

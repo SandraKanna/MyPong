@@ -1,4 +1,5 @@
 import type { MatchRowTs } from '../services/match.service';
+import type { MatchRejectionReason } from '@mypong/types';
 
 export class MatchmakingQueue {
   private readonly queue: number[] = [];
@@ -14,7 +15,7 @@ export class MatchmakingQueue {
       this.send({
         type:    'match:rejected',
         to:      [userId],
-        payload: { reason: 'guest_not_allowed', message: 'Guests cannot join PvP matchmaking.' },
+        payload: { reason: 'guest_not_allowed', message: 'Guests cannot join PvP matchmaking.' } satisfies { reason: MatchRejectionReason; message: string },
       });
       return;
     }
@@ -24,7 +25,7 @@ export class MatchmakingQueue {
       this.send({
         type:    'match:rejected',
         to:      [userId],
-        payload: { reason: 'already_in_match', message: 'You are already in an active match.' },
+        payload: { reason: 'already_in_match', message: 'You are already in a match.' } satisfies { reason: MatchRejectionReason; message: string },
       });
       return;
     }
