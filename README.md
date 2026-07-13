@@ -2,6 +2,9 @@
 
 A real-time multiplayer Pong game: 1v1 online, matchmaking, and an AI opponent. Built as a full-stack portfolio project using a microservices architecture.
 
+MyPong reimplements the scope of Transcendence, a 42 School capstone project, from scratch — same core requirements (real-time gameplay, JWT auth, microservices), rebuilt with modern tooling and stronger engineering practices (TypeScript throughout, CI/CD, consistent test coverage) than the original assignment required.
+
+
 > **Active development** — see [Phase plan](#phase-plan) below for current status.
 
 ---
@@ -19,7 +22,7 @@ A real-time multiplayer Pong game: 1v1 online, matchmaking, and an AI opponent. 
 
 See each service's README for endpoint-level detail and setup.
 
-AI opponent and guest mode are fully implemented. Tournament mode was evaluated and intentionally left out of this portfolio's scope — see the note under [Phase plan](#phase-plan).
+AI opponent and guest mode are fully implemented. Tournament mode — part of Transcendence's original requirements — was evaluated and intentionally left out of this rebuild's scope; see the note under [Phase plan](#phase-plan).
 
 ---
 
