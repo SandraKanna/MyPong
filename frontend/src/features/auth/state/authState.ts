@@ -17,9 +17,15 @@ interface AuthSlice {
   accessToken: string | null;
   user: User | null;
   isGuest: boolean;
+  // Set when this session was ended by the server, not by the user choosing to
+  // log out (e.g. a login elsewhere revoked this session's refresh token and
+  // closed its WebSocket connection). Read once by LoginPage, then cleared —
+  // see wsClient.ts and LoginPage.tsx.
+  sessionEndedMessage: string | null;
   setAuth: (accessToken: string, user?: User) => void;
   setGuestAuth: (accessToken: string) => void;
   clearAuth: () => void;
+  setSessionEndedMessage: (message: string | null) => void;
 }
 
 // STUDY: The access token lives here — in JavaScript memory only. It is never
@@ -31,6 +37,7 @@ export const useAuthStore = create<AuthSlice>()((set) => ({
   accessToken: null,
   user: null,
   isGuest: false,
+  sessionEndedMessage: null,
 
   // STUDY: user is optional so the same action works for both login (which
   // provides a user object) and token refresh (which only provides a new token).
@@ -47,4 +54,6 @@ export const useAuthStore = create<AuthSlice>()((set) => ({
 
   clearAuth: () =>
     set({ accessToken: null, user: null, status: 'unauthenticated', isGuest: false }),
+
+  setSessionEndedMessage: (message) => set({ sessionEndedMessage: message }),
 }));

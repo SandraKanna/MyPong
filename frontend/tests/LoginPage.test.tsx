@@ -1,14 +1,22 @@
-import { describe, it, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import LoginPage from '../src/features/auth/pages/LoginPage';
 import { login } from '../src/features/auth/api/auth';
+import { useAuthStore } from '../src/features/auth/state/authState';
 
 vi.mock('../src/features/auth/api/auth');
 
 beforeEach(() => {
   vi.resetAllMocks();
+  useAuthStore.setState({
+    status: 'unauthenticated',
+    accessToken: null,
+    user: null,
+    isGuest: false,
+    sessionEndedMessage: null,
+  });
 });
 
 function renderLoginPage() {
@@ -54,5 +62,21 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('button', { name: /log in/i }));
 
     await screen.findByText(/invalid credentials/i);
+  });
+
+  it('shows sessionEndedMessage when set (e.g. session replaced elsewhere) and clears it from the store', async () => {
+    useAuthStore.setState({ sessionEndedMessage: 'You were signed in elsewhere.' });
+    renderLoginPage();
+
+    screen.getByText('You were signed in elsewhere.');
+    // Consumed once on mount — a later, unrelated visit to /login must not show it again.
+    await vi.waitFor(() => {
+      expect(useAuthStore.getState().sessionEndedMessage).toBeNull();
+    });
+  });
+
+  it('does not show any message when sessionEndedMessage is null', () => {
+    renderLoginPage();
+    expect(screen.queryByText(/signed in elsewhere/i)).toBeNull();
   });
 });
