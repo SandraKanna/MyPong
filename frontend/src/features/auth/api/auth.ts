@@ -29,6 +29,15 @@ async function readErrorMessage(res: Response, defaultMessage: string): Promise<
   }
 }
 
+// STUDY: Shared by login() and register() — both endpoints return the exact
+// same body shape ({ accessToken }, `user` currently always undefined at
+// runtime) and both should leave the caller authenticated the same way.
+// setAuth handles a missing `user` gracefully (preserves existing user state),
+// so the type cast here is optimistic but not a bug.
+function applyAuthResponse(body: { accessToken: string; user?: User }): void {
+  useAuthStore.getState().setAuth(body.accessToken, body.user);
+}
+
 // STUDY: login() calls the API, then writes the result into Zustand immediately —
 // no return value, no prop callbacks. Any component that reads useAuthStore will
 // re-render automatically once status flips to 'authenticated'.
@@ -40,15 +49,11 @@ export async function login(email: string, password: string): Promise<void> {
   });
 
   if (!res.ok) {
-    const message = await readErrorMessage(res, 'Credenciales inválidas');
+    const message = await readErrorMessage(res, 'Invalid credentials');
     throw new Error(message);
   }
 
-  // STUDY: The server currently only sends { accessToken } — the `user` field is
-  // undefined at runtime. setAuth handles undefined gracefully (preserves existing
-  // user state), so this is not a bug, but the type cast is optimistic.
-  const { accessToken, user } = (await res.json()) as { accessToken: string; user: User };
-  useAuthStore.getState().setAuth(accessToken, user);
+  applyAuthResponse(await res.json() as { accessToken: string; user: User });
 }
 
 // STUDY: logout() clears local auth state unconditionally, even if the DELETE
@@ -71,10 +76,10 @@ export async function loginAsGuest(): Promise<void> {
   useAuthStore.getState().setGuestAuth(accessToken);
 }
 
-// STUDY: register() intentionally does NOT log the user in. After a successful
-// registration the caller navigates to /login — the user must authenticate
-// explicitly. This keeps the flow simple and avoids a second round-trip for a
-// token immediately after creating the account.
+// STUDY: register() logs the user in immediately — the backend returns the same
+// { accessToken } shape as /login and sets the same refresh cookie, so this
+// reuses applyAuthResponse() rather than sending the user back to /login to
+// authenticate a second time right after creating the account.
 export async function register(email: string, password: string): Promise<void> {
   const res = await apiClient('/api/auth/register', {
     method: 'POST',
@@ -83,7 +88,9 @@ export async function register(email: string, password: string): Promise<void> {
   });
 
   if (!res.ok) {
-    const message = await readErrorMessage(res, 'No se pudo registrar');
+    const message = await readErrorMessage(res, 'Could not register');
     throw new Error(message);
   }
+
+  applyAuthResponse(await res.json() as { accessToken: string; user: User });
 }

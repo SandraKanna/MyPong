@@ -16,7 +16,7 @@ function renderRegisterPage() {
     <MemoryRouter initialEntries={['/register']}>
       <Routes>
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/login" element={<div>Login</div>} />
+        <Route path="/profile" element={<div>Profile</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -30,7 +30,7 @@ describe('RegisterPage', () => {
     screen.getByRole('button', { name: /register/i });
   });
 
-  it('calls register with form values and navigates to /login on success', async () => {
+  it('calls register with form values and navigates to /profile on success', async () => {
     vi.mocked(register).mockResolvedValue(undefined);
     const user = userEvent.setup();
     renderRegisterPage();
@@ -40,7 +40,7 @@ describe('RegisterPage', () => {
     await user.click(screen.getByRole('button', { name: /register/i }));
 
     expect(vi.mocked(register)).toHaveBeenCalledWith('new@example.com', 'securepass');
-    await screen.findByText('Login');
+    await screen.findByText('Profile');
   });
 
   it('displays the error message when registration fails', async () => {
