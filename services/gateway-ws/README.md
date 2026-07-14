@@ -80,7 +80,7 @@ gateway-ws is normally reached only through nginx (`wss://<host>/ws`) — the br
    or use **Play vs AI** as a guest from the home page (connection opens on the **Play vs AI** click).
 4. Confirm you see a `ws` entry with status `101`. Click it to see the message frames: **Preview** tab 
    in Safari, **Messages** tab in Chrome. Either way, confirm `{"type":"auth",...}` sent and `{"type":"connected",...}` received.
-  ![ws connection with 101 Switching Protocols](../../docs/img/gateway-ws-101.png)
+  <img src="../../docs/img/gateway-ws-101.png" alt="ws connection with 101 Switching Protocols" width="500">
 
 No port needs to be uncommented for this — nginx reaches gateway-ws internally.
 

@@ -58,7 +58,7 @@ gateway-api is normally reached only through nginx (`/api/*`) — the browser ne
    one has been created. Seeing gateway-api route these calls to both
    auth-service and user-service confirms it's working correctly.
 
-   ![register and me calls routed through gateway-api](../../docs/img/registered-profileless.png)
+   <img src="../../docs/img/registered-profileless.png" alt="register and me calls routed through gateway-api" width="500">
 
 No port needs to be uncommented for this — nginx reaches gateway-api internally.
 

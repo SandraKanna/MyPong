@@ -47,11 +47,11 @@ To verify auth-service works:
 3. Go to the **Network** tab.
 4. Filter to **XHR/Fetch** (not "All") — do this *before* the next step.
 5. Register a new account through the UI.
-  ![create an account](../../docs/img/register.png)
+  <img src="../../docs/img/register.png" alt="create an account" width="400">
+
 6. In the Network tab, click the `register` request and confirm it shows
   `201 Created` under Headers → Summary → Status.
-
-  ![register request showing 201 Created](../../docs/img/register-201.png)
+  <img src="../../docs/img/register-201.png" alt="register request showing 201 Created" width="500">
 
 No port needs to be uncommented for this — nginx reaches auth-service internally.
 
