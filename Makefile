@@ -9,6 +9,15 @@ SERVICES = postgres auth-service user-service gateway-api gateway-ws game-servic
 # Build (if needed) and create + start the stack. Use after code changes.
 up:
 	@$(COMPOSE) -p $(PROJECT) up --build -d $(SERVICES)
+	@$(MAKE) migrate
+
+# Apply pending migrations for each service that owns tables. Order matters:
+# auth-service must run before user-service (FK dependency on users). Safe to
+# re-run on an already-migrated database — node-pg-migrate skips applied ones.
+migrate:
+	@$(COMPOSE) -p $(PROJECT) exec -T auth-service npx node-pg-migrate up --migrations-table pgmigrations_auth
+	@$(COMPOSE) -p $(PROJECT) exec -T user-service npx node-pg-migrate up --migrations-table pgmigrations_user
+	@$(COMPOSE) -p $(PROJECT) exec -T match-service npx node-pg-migrate up --migrations-table pgmigrations_match
 
 # Stop running containers WITHOUT removing them (fast; preserves state and data).
 stop:
@@ -38,4 +47,4 @@ fclean:
 
 rebuild: fclean up
 
-.PHONY: up start stop down logs ps clean fclean rebuild
+.PHONY: up migrate start stop down logs ps clean fclean rebuild
