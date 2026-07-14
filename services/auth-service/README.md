@@ -16,6 +16,13 @@ These paths are without the `/api/auth` prefix — that prefix is added by gatew
 **Single session per account.** Each successful `/login` revokes every refresh token row still active for that `user_id` (`revoked_at IS NULL`) before issuing a new one — a second login effectively logs out any other session for the same account. This only happens on `/login`: `/register` has no prior session to revoke, and `/guest` never issues a refresh token at all. The access token from a superseded session keeps working until it expires (up to 15 minutes) or until its own `/refresh` is attempted, whichever comes first — `/refresh` checks `revoked_at` and rejects a revoked token immediately. gateway-ws separately closes the superseded session's WebSocket connection with code `4009` as soon as the new login's connection replaces it — see [gateway-ws's README](../gateway-ws/README.md#single-session-per-user).
 
 
+## Environment variables
+
+- `PORT` (required) — HTTP port auth-service listens on
+- `DATABASE_URL` (required) — Postgres connection string, see `.env.example` for native-flow specifics
+- `JWT_SECRET` (required) — signs/verifies access tokens, must match gateway-api and gateway-ws
+- `JWT_REFRESH_SECRET` (required) — signs/verifies refresh tokens, known only to auth-service
+
 ## Testing
 
 ### Unit tests
@@ -71,7 +78,7 @@ Runs against gateway-api (default: `:4010`), not auth-service directly — the r
 
 ```bash
 cd services/auth-service
-./scripts/smoke-test.sh  # defaults to http://localhost:4010; 12 cases: register, login, refresh, logout, guest + deny cases
+./scripts/smoke-test.sh  # defaults to http://localhost:4010;
 ```
 
 12 cases: register (new + duplicate + invalid input), login (valid + wrong password), refresh (valid + rotated-token-rejected + after-logout + no-cookie), logout, guest token issuance, and guest token rejected on a protected REST route.
