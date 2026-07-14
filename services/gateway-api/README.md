@@ -22,6 +22,13 @@ All routes are under `/api/`. Public routes pass through without JWT validation;
 The `/api/auth` prefix is stripped before proxying — auth-service receives `/register`, `/login`, etc. (see [auth-service README](../auth-service/README.md)).
 The `/api/users` prefix is stripped similarly — user-service receives `/me`, `/:id/stats`, etc.
 
+## Environment variables
+
+- `PORT` (required) — HTTP port gateway-api listens on
+- `JWT_SECRET` (required) — must match auth-service, used to verify access tokens
+- `AUTH_SERVICE_URL` (required) — base URL to proxy `/api/auth/*` to
+- `USER_SERVICE_URL` (required) — base URL to proxy `/api/users/*` to
+
 ## Testing
 
 ### Unit tests
