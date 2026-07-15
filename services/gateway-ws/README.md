@@ -94,7 +94,6 @@ Talks to gateway-ws directly (`:4500`) to test the WS auth protocol, and to gate
 2. Also uncomment gateway-api's `127.0.0.1:4010:4000` port mapping (marked `# Native dev only`) — the smoke test needs it to fetch a real access token.
 3. `make up`
 4. Confirm both are up: `docker ps -a` should show `127.0.0.1:4500->4500/tcp` and `127.0.0.1:4010->4000/tcp`.
-5. Run migrations (see [root README](../../README.md#prerequisites)) — gateway-ws needs a real registered user to get a JWT from. Skip if you already did this for the same DB volume.
 
 **Run:**
 
