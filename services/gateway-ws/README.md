@@ -44,7 +44,7 @@ gateway-ws routes messages between browsers and services with no business logic 
 
 **Service → browser fan-out** (`to` field): a service message with a `to: number[]` field is delivered to each userId in the array. The `to` field is stripped before delivery. This is how services push game events to specific browser clients.
 
-**Service → service (type-prefix routing)**: a service message without a `to` field is routed by the prefix before the first `:` in the `type` field — e.g. `match:result` routes to `match-service`, `game:assign` routes to `game-service`. No rewriting of `type` or payload.
+**Service → service (type-prefix routing)**: a service message without a `to` field is routed by the prefix before the first `:` in the `type` field — e.g. `match:result` routes to `match-service`, `game:assign` routes to `game-service`. The prefix always names the **destination**, not the sender — `match:result` above is sent *by* game-service, not match-service. No rewriting of `type` or payload.
 
 **Browser → service (userId injection)**: gateway-ws injects the authenticated `userId` into every message received from a browser before forwarding it to the target service (derived from the validated JWT, never from the payload). A client-supplied `userId` in the message body is ignored.
 
