@@ -41,7 +41,7 @@ npm install # if you don't already have node_modules
 npm test
 ```
 
-4 files and 39 tests should pass.
+4 files and 39 tests should pass: the JWT auth plugin (public routes, missing/malformed/wrong-secret/expired/wrong-type tokens, valid token sets `request.userId`), `authProxyRoutes` (prefix stripping, method/body forwarding, upstream status and body passthrough, cookie forwarding in both directions, content-type handling, 502 on fetch failure), `proxyRequest`'s `x-user-id` header injection, and `userProxyRoutes` (prefix stripping, method/body forwarding, upstream passthrough, `x-user-id` injection, multipart forwarding).
 
 ### Docker (full Compose stack)
 

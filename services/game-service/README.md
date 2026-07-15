@@ -62,7 +62,7 @@ npm install   # if you don't already have node_modules
 npm test
 ```
 
-4 files and 97 tests should pass.
+4 files and 97 tests should pass: `GameSessionManager` (assign/input handling, pause/resume and forfeit grace windows, countdown-window disconnects, voluntary leave, PvE session lifecycle and difficulty-based physics overrides), `Ball` (wall bounce, reverseX, speed clamping, reset), `Game` (initial state, paddle movement and clamping, pause/resume, scoring and serve direction, paddle collision), and the WS internal client (registration, message dispatch, reconnect, health file, pending queue).
 
 ### Docker (full Compose stack)
 
@@ -142,16 +142,16 @@ npm run dev             # connects to GATEWAY_WS_URL on start; /tmp/healthy writ
 **Verify manually**, from that second terminal:
 
 ```bash
-cat /tmp/healthy   # exists (empty file) if connected to gateway-ws; "No such file" if not
+ls -la /tmp/healthy   # shows a 0-byte file if connected to gateway-ws; "No such file or directory" if not
 ```
 
 If it doesn't exist, check the first terminal for repeating `gateway-ws connection error` lines — that means gateway-ws's port isn't actually reachable (see Setup above).
 
-**Cleanup:** stop the native process (`Ctrl+C`), re-comment gateway-ws's port mapping in the root `docker-compose.yml`, then restart both containers so the changes take effect:
+**Cleanup:** stop the native process (`Ctrl+C`), re-comment gateway-ws's port mapping in the root `docker-compose.yml`, then restart both containers so the changes take effect (`start` alone won't pick up a docker-compose.yml edit):
 
 ```bash
 docker compose -p mypong start game-service
-docker compose -p mypong start gateway-ws
+docker compose -p mypong up -d gateway-ws
 ```
 
 ## Gotchas / known limitations

@@ -49,7 +49,7 @@ npm install   # if you don't already have node_modules
 npm test
 ```
 
-3 files and 43 tests should pass.
+3 files and 43 tests should pass: `BotSessionManager` (session start/end, reaction delay and update-interval throttling, direction correction and stop-zone behavior, target stability and re-targeting on ball reversal, per-difficulty tracking error and deliberate-miss behavior), `predictBallY` (wall-bounce reflection, multiple bounces, valid-range invariant), and the WS internal client (registration, message dispatch, reconnect, health file, pending queue).
 
 ### Docker (full Compose stack)
 
@@ -96,10 +96,10 @@ The script's own `finally` block only closes its WebSocket — it never calls `d
 docker compose -p mypong start game-service
 ```
 
-Re-comment gateway-ws's port mapping in the root `docker-compose.yml` and restart the container so the change takes effect:
+Re-comment gateway-ws's port mapping in the root `docker-compose.yml` and recreate the container so the change takes effect (`start` alone won't pick up a docker-compose.yml edit):
 
 ```bash
-docker compose -p mypong start gateway-ws
+docker compose -p mypong up -d gateway-ws
 ```
 
 > This isolated test doesn't prove `game:botInput` actually moves a real paddle — no physics loop here to apply it to. For that, see [game-service's smoke test](../game-service/README.md#smoke-test), which chains ai-bot-service's decisions + gateway-ws routing + game-service's physics end-to-end.

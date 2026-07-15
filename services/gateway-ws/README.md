@@ -66,7 +66,7 @@ npm install   # if you don't already have node_modules
 npm test
 ```
 
-3 files and 34 tests should pass.
+3 files and 34 tests should pass: WebSocket auth (valid/guest/refresh/wrong-secret/expired tokens, timeout, malformed first message, health endpoint), service registration and routing (register success/deny cases, stale-close safety, browser→service userId injection, service→browser fan-out, service→service routing, presence broadcast on connect/disconnect), and single-session replacement (4009 close, ordering of disconnect-before-connect broadcasts, unaffected sessions for other userIds).
 
 ### Docker (full Compose stack)
 
@@ -114,20 +114,19 @@ node services/gateway-ws/scripts/smoke-test.mjs ws://localhost:4500 http://local
 
 Use this only if you're actively editing gateway-ws's own code and want instant reload instead of rebuilding the Docker image on every change.
 
+**Setup (once per fresh environment):**
+
 gateway-ws's port is commented out by default, so this needs no setup — unless you left it uncommented from the Smoke test above, in which case free it first:
 
 ```bash
 docker compose -p mypong stop gateway-ws
 ```
 
-This flow uses its own `.env` file, separate from the root one used by Docker:
+**Run:**
 
 ```bash
 cd services/gateway-ws
 cp .env.example .env   # fill in JWT_SECRET and INTERNAL_SERVICE_SECRET — must match the root .env values
-```
-
-```bash
 npm install   # if not already done for unit tests
 set -a && source .env && set +a
 npm run dev   # ws://localhost:4500
@@ -188,9 +187,8 @@ If the 5-second window passes before sending, the server closes with code 4001 �
 > but this native check succeeds, the bug is in `nginx.conf`'s `/ws` block,
 > not gateway-ws itself.
 
-**Cleanup:** stop the native process (`Ctrl+C`) and, if you uncommented
-gateway-ws's port mapping, re-comment it and restart the Docker container:
+**Cleanup:** stop the native process (`Ctrl+C`) and, if you uncommented gateway-ws's port mapping, re-comment it and recreate the Docker container so the change takes effect (`start` reuses the existing container as-is; `up -d` recreates it, which is required to pick up a docker-compose.yml edit like this one):
 
 ```bash
-docker compose -p mypong start gateway-ws
+docker compose -p mypong up -d gateway-ws
 ```

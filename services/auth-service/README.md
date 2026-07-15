@@ -34,7 +34,7 @@ cd services/auth-service
 npm install # if you don't already have node_modules
 npm test
 ```
-1 file and 18 tests should pass.
+1 file and 18 tests should pass: `auth-service routes` — register (success, duplicate email, DB error, invalid input), login (success, session revocation on re-login, wrong password and unknown email both returning the same 401), refresh (success, already-rotated token, invalid signature, missing cookie), logout (valid token, invalid token, no cookie, DB failure — all idempotent), and guest token issuance.
 
 ### Docker (full Compose stack)
 
