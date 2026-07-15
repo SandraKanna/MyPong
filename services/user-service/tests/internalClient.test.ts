@@ -34,13 +34,13 @@ describe('internalClient — sends service:register on connect', () => {
     client = createInternalClient({
       url: `ws://127.0.0.1:${port}`,
       secret: 'x'.repeat(32),
-      serviceName: 'match-service',
+      serviceName: 'user-service',
       initialRetryDelayMs: 50,
     });
 
     expect(await firstMessage).toEqual({
       type:    'service:register',
-      service: 'match-service',
+      service: 'user-service',
       token:   'x'.repeat(32),
     });
   });
@@ -68,7 +68,7 @@ describe('internalClient — dispatches incoming messages to handlers', () => {
     client = createInternalClient({
       url: `ws://127.0.0.1:${port}`,
       secret: 'x'.repeat(32),
-      serviceName: 'match-service',
+      serviceName: 'user-service',
       initialRetryDelayMs: 50,
     });
 
@@ -82,12 +82,12 @@ describe('internalClient — dispatches incoming messages to handlers', () => {
 
   it('calls the registered handler when a matching type arrives', async () => {
     const received = new Promise<unknown>((resolve) => {
-      client.onMessage('match:matched', (msg) => { resolve(msg); });
+      client.onMessage('user:matchRecorded', (msg) => { resolve(msg); });
     });
 
-    serverSocket.send(JSON.stringify({ type: 'match:matched', payload: { matchId: 7 } }));
+    serverSocket.send(JSON.stringify({ type: 'user:matchRecorded', payload: { matchId: 7 } }));
 
-    expect(await received).toMatchObject({ type: 'match:matched', payload: { matchId: 7 } });
+    expect(await received).toMatchObject({ type: 'user:matchRecorded', payload: { matchId: 7 } });
   });
 
   it('ignores messages with no registered handler', async () => {
@@ -129,7 +129,7 @@ describe('internalClient — reconnects after disconnect', () => {
     client = createInternalClient({
       url: `ws://127.0.0.1:${port}`,
       secret: 'x'.repeat(32),
-      serviceName: 'match-service',
+      serviceName: 'user-service',
       initialRetryDelayMs: 50, // fast retry so the test completes quickly
     });
 
@@ -185,7 +185,7 @@ describe('internalClient — health file management', () => {
     client = createInternalClient({
       url: `ws://127.0.0.1:${port}`,
       secret: 'x'.repeat(32),
-      serviceName: 'match-service',
+      serviceName: 'user-service',
       initialRetryDelayMs: 50,
       healthFilePath: filePath,
     });
@@ -205,7 +205,7 @@ describe('internalClient — health file management', () => {
     client = createInternalClient({
       url: `ws://127.0.0.1:${port}`,
       secret: 'x'.repeat(32),
-      serviceName: 'match-service',
+      serviceName: 'user-service',
       initialRetryDelayMs: 50,
       healthFilePath: filePath,
     });
@@ -230,7 +230,7 @@ describe('internalClient — health file management', () => {
     client = createInternalClient({
       url: `ws://127.0.0.1:${port}`,
       secret: 'x'.repeat(32),
-      serviceName: 'match-service',
+      serviceName: 'user-service',
       initialRetryDelayMs: 50,
       healthFilePath: filePath,
     });
@@ -280,7 +280,7 @@ describe('internalClient — pending queue', () => {
     client = createInternalClient({
       url: `ws://127.0.0.1:${port}`,
       secret: 'x'.repeat(32),
-      serviceName: 'match-service',
+      serviceName: 'user-service',
       initialRetryDelayMs: 50,
       healthFilePath: filePath,
     });
@@ -323,20 +323,20 @@ describe('internalClient — pending queue', () => {
     const nextMessages = collectNextConnectionMessages(2); // register + queued message
 
     await disconnect();
-    client.send({ type: 'match:matched', payload: { matchId: 1 } });
+    client.send({ type: 'user:matchRecorded', payload: { matchId: 1 } });
 
     const [register, queued] = await nextMessages;
     expect(register).toMatchObject({ type: 'service:register' });
-    expect(queued).toMatchObject({ type: 'match:matched', payload: { matchId: 1 } });
+    expect(queued).toMatchObject({ type: 'user:matchRecorded', payload: { matchId: 1 } });
   });
 
   it('flushes queued messages in FIFO order immediately after reconnecting', async () => {
     const nextMessages = collectNextConnectionMessages(4); // register + 3 queued messages
 
     await disconnect();
-    client.send({ type: 'match:matched', payload: { seq: 1 } });
-    client.send({ type: 'match:matched', payload: { seq: 2 } });
-    client.send({ type: 'match:matched', payload: { seq: 3 } });
+    client.send({ type: 'user:matchRecorded', payload: { seq: 1 } });
+    client.send({ type: 'user:matchRecorded', payload: { seq: 2 } });
+    client.send({ type: 'user:matchRecorded', payload: { seq: 3 } });
 
     const [, first, second, third] = await nextMessages;
     expect(first).toMatchObject({ payload: { seq: 1 } });
@@ -365,7 +365,7 @@ describe('internalClient — pending queue', () => {
 
     await disconnect();
     for (let seq = 1; seq <= 51; seq++) {
-      client.send({ type: 'match:matched', payload: { seq } });
+      client.send({ type: 'user:matchRecorded', payload: { seq } });
     }
 
     const [, ...queued] = await nextMessages;

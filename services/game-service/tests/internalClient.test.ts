@@ -250,3 +250,129 @@ describe('internalClient — health file management', () => {
     expect(fs.existsSync(filePath)).toBe(true);
   });
 });
+
+describe('internalClient — pending queue', () => {
+  let server: WebSocketServer;
+  let port: number;
+  let client: InternalClient;
+  let serverSocket: WebSocket;
+  let filePath: string;
+
+  beforeEach(async () => {
+    // healthFilePath gives a deterministic, externally observable signal that
+    // the client's own socket has actually transitioned out of OPEN — closing
+    // the server side is not enough by itself, since the client's readyState
+    // only flips asynchronously afterward. Waiting for file removal (below)
+    // avoids a race where send() would still hit the OPEN branch.
+    filePath = path.join(os.tmpdir(), `test-healthy-${Math.random().toString(36).slice(2)}`);
+
+    server = new WebSocketServer({ port: 0 });
+    await new Promise<void>((resolve) => { server.once('listening', resolve); });
+    port = (server.address() as { port: number }).port;
+
+    const connected = new Promise<void>((resolve) => {
+      server.once('connection', (ws) => {
+        serverSocket = ws;
+        ws.once('message', () => { resolve(); }); // consume service:register
+      });
+    });
+
+    client = createInternalClient({
+      url: `ws://127.0.0.1:${port}`,
+      secret: 'x'.repeat(32),
+      serviceName: 'game-service',
+      initialRetryDelayMs: 50,
+      healthFilePath: filePath,
+    });
+
+    await connected;
+  });
+
+  afterEach(async () => {
+    client.close();
+    try { fs.unlinkSync(filePath); } catch { /* already removed */ }
+    await new Promise<void>((resolve) => { server.close(() => { resolve(); }); });
+  });
+
+  // Collects every message the next connection receives, in arrival order,
+  // starting from its own service:register. Resolves once `count` messages
+  // have been seen.
+  function collectNextConnectionMessages(count: number): Promise<unknown[]> {
+    return new Promise((resolve) => {
+      server.once('connection', (ws) => {
+        const received: unknown[] = [];
+        ws.on('message', (data) => {
+          received.push(JSON.parse(data.toString()));
+          if (received.length === count) resolve(received);
+        });
+      });
+    });
+  }
+
+  // Closes the current connection and waits for confirmation that the
+  // client's own socket is no longer OPEN (health file removed), so a
+  // subsequent client.send() is guaranteed to hit the queuing branch.
+  async function disconnect(): Promise<void> {
+    serverSocket.close();
+    await vi.waitFor(() => {
+      expect(fs.existsSync(filePath)).toBe(false);
+    }, { timeout: 1000, interval: 10 });
+  }
+
+  it('queues a message sent while disconnected instead of dropping it', async () => {
+    const nextMessages = collectNextConnectionMessages(2); // register + queued message
+
+    await disconnect();
+    client.send({ type: 'game:assign', payload: { matchId: 1 } });
+
+    const [register, queued] = await nextMessages;
+    expect(register).toMatchObject({ type: 'service:register' });
+    expect(queued).toMatchObject({ type: 'game:assign', payload: { matchId: 1 } });
+  });
+
+  it('flushes queued messages in FIFO order immediately after reconnecting', async () => {
+    const nextMessages = collectNextConnectionMessages(4); // register + 3 queued messages
+
+    await disconnect();
+    client.send({ type: 'game:assign', payload: { seq: 1 } });
+    client.send({ type: 'game:assign', payload: { seq: 2 } });
+    client.send({ type: 'game:assign', payload: { seq: 3 } });
+
+    const [, first, second, third] = await nextMessages;
+    expect(first).toMatchObject({ payload: { seq: 1 } });
+    expect(second).toMatchObject({ payload: { seq: 2 } });
+    expect(third).toMatchObject({ payload: { seq: 3 } });
+  });
+
+  it('does not queue game:state while disconnected', async () => {
+    // A game:state sent while disconnected must never reach the server, but a
+    // normal message sent afterward must still flush — waiting for the flush's
+    // own arrival (rather than a fixed timeout) proves the exclusion held for
+    // the whole disconnected window, not just up to an arbitrary deadline.
+    const nextMessages = collectNextConnectionMessages(2); // register + the marker message
+
+    await disconnect();
+    client.send({ type: 'game:state', payload: { matchId: 1, ball: {}, paddles: {}, score: {} } });
+    client.send({ type: 'game:end', payload: { matchId: 1, marker: 'after-game-state' } });
+
+    const received = await nextMessages;
+    expect(received.some((m) => (m as { type: string }).type === 'game:state')).toBe(false);
+    expect(received).toContainEqual({ type: 'game:end', payload: { matchId: 1, marker: 'after-game-state' } });
+  });
+
+  it('drops the oldest queued message when the pending queue exceeds its 50-entry cap', async () => {
+    const nextMessages = collectNextConnectionMessages(51); // register + 50 surviving queued messages
+
+    await disconnect();
+    for (let seq = 1; seq <= 51; seq++) {
+      client.send({ type: 'game:assign', payload: { seq } });
+    }
+
+    const [, ...queued] = await nextMessages;
+    const seqs = queued.map((m) => (m as { payload: { seq: number } }).payload.seq);
+    expect(seqs).toHaveLength(50);
+    expect(seqs).not.toContain(1); // oldest — dropped to make room
+    expect(seqs[0]).toBe(2);
+    expect(seqs[49]).toBe(51);
+  });
+});
