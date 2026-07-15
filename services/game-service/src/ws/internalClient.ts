@@ -28,8 +28,17 @@ const BACKOFF_FACTOR  = 2;
 const BACKOFF_CAP_MS  = 30_000;
 const BACKOFF_INIT_MS = 1_000;
 
+// Skipped: superseded every tick anyway, so queuing them would waste capacity.
+const SKIP_QUEUE_TYPES = new Set(['game:state', 'ai-bot:state']);
+
+// In-memory queue for sends while disconnected; flushed in order on reconnect.
+// Capped so a long outage can't grow it unbounded. Not persisted — a crash or
+// restart drops anything still queued.
+const PENDING_QUEUE_CAP = 50;
+
 export function createInternalClient(opts: CreateInternalClientOpts): InternalClient {
   const handlers  = new Map<string, (msg: WsEnvelope) => void>();
+  const pendingQueue: object[] = [];
   let delay   = opts.initialRetryDelayMs ?? BACKOFF_INIT_MS;
   let stopped = false;
   let ws!: WebSocket; // assigned synchronously by connect() before any method is callable
@@ -47,6 +56,9 @@ export function createInternalClient(opts: CreateInternalClientOpts): InternalCl
         service: opts.serviceName,
         token:   opts.secret,
       }));
+      while (pendingQueue.length > 0) {
+        ws.send(JSON.stringify(pendingQueue.shift()));
+      }
     });
 
     ws.on('message', (data: RawData) => {
@@ -88,7 +100,15 @@ export function createInternalClient(opts: CreateInternalClientOpts): InternalCl
     send(msg: object): void {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(msg));
+        return;
       }
+      const type = (msg as { type?: unknown }).type;
+      if (SKIP_QUEUE_TYPES.has(type as string)) return;
+      if (pendingQueue.length >= PENDING_QUEUE_CAP) {
+        const dropped = pendingQueue.shift() as { type?: unknown } | undefined;
+        console.warn(`[${opts.serviceName}] queue full (${PENDING_QUEUE_CAP}) — dropped oldest queued message: ${String(dropped?.type)}`);
+      }
+      pendingQueue.push(msg);
     },
 
     onMessage(type: string, handler: (msg: WsEnvelope) => void): void {
