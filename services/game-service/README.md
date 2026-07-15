@@ -56,6 +56,8 @@ game-service has no HTTP server. Docker tracks liveness via a file: `internalCli
 test: ["CMD-SHELL", "test -f /tmp/healthy"]
 ```
 
+> **Healthcheck limitation:** `test -f /tmp/healthy` only confirms game-service connected to gateway-ws at some point — not that it currently holds its registration slot. This is a general property of gateway-ws's routing (see its README's "Routing" section), not specific to game-service — but game-service is the one service in this repo with a known trigger for it: ai-bot-service's smoke test deliberately registers as `game-service` to observe `game:botInput` (with its own Setup/Cleanup to do so safely). If that Setup step is skipped, or in the unlikely case anything else registers under this name, the container's socket stays open — `/tmp/healthy` is never deleted and the healthcheck keeps reporting `healthy` while receiving nothing. `docker compose -p mypong restart game-service` recovers it.
+
 ## Testing
 
 ### Unit tests
@@ -115,6 +117,8 @@ INTERNAL_SERVICE_SECRET=<value> node services/game-service/scripts/smoke-test.mj
 INTERNAL_SERVICE_SECRET=<value> node services/game-service/scripts/smoke-test.mjs ws://localhost:4500 http://localhost:4010
 ```
 
-9 cases: browser auth (2 players + 1 outsider), internal service registration as `test-service`, `game:assign` delivering `game:state` to both players, initial state shape validation, `game:input` moving the correct paddle, outsider input silently ignored, forfeit by disconnect with correct winner, and clean shutdown.
+15 cases: browser auth (2 players + 1 outsider), internal service registration as `test-service`, `game:assign` delivering `game:state` to both players, initial state shape validation, `game:input` moving the correct paddle, outsider input silently ignored, forfeit by disconnect with correct winner, PvE session assignment for both a logged-in user and a guest (`match:matched` shape only, no wait), one cross-service integration check, `game:startAI` with a retired difficulty value silently rejected, and clean shutdown.
+
+**The cross-service integration check** (guest PvE, ~11.5s wait) is not game-service's own concern in isolation — it chains ai-bot-service's decision logic, gateway-ws's message routing, and game-service's own physics application together and confirms the AI paddle actually moves. It lives in this file rather than in ai-bot-service's own smoke test because gateway-ws routes `game:botInput` with no fan-out — only whoever holds the `game-service` registration slot receives it — so this is the only vantage point where that message's real-world effect is observable at all. See [ai-bot-service's README](../ai-bot-service/README.md#smoke-test) for the isolated counterpart that verifies ai-bot-service's own decision logic without this dependency, and for the full reasoning behind the split.
 
 Note: the smoke test sends `game:assign` without `startsAt` — the session starts immediately (no countdown delay). This is intentional for isolation; the real countdown flow is covered by unit tests with fake timers.

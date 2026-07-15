@@ -4,6 +4,17 @@
  * Tests: game:assign, game:input, game:state.
  * Match completion (match:result / game:end) is covered by unit tests with fake timers.
  *
+ * Also includes one cross-service integration check (guest PvE, see "Test:
+ * cross-service" below): it exercises ai-bot-service's decision logic, gateway-ws's
+ * message routing, AND game-service's own physics application together, end-to-end.
+ * It lives here rather than in ai-bot-service's own smoke test because gateway-ws
+ * routes game:botInput (ai-bot-service's only outbound message) with no fan-out —
+ * only whoever currently holds the game-service registration slot receives it — so
+ * this is the only vantage point from which that message's real-world effect (an
+ * actual paddle coordinate changing) is observable at all. See
+ * ai-bot-service/README.md's Smoke test section for the isolated counterpart that
+ * verifies ai-bot-service's own decision logic without this dependency.
+ *
  * Requires:
  *   - Full stack running (make up) with migrations applied.
  *   - INTERNAL_SERVICE_SECRET set in the environment.
@@ -371,8 +382,11 @@ async function main() {
       fail('forfeit by disconnect — game:end not received on surviving browser within 12s', err.message);
     }
 
-    // ── Tests 9-11: game:startAI — live PvE session with moving AI paddle ────────
-    // Isolated browser so the PvE session has no overlap with the PvP sessions above.
+    // ── Tests 9-10: game:startAI — PvE session assignment (logged-in) ─────────────
+    // Proves game-service's own responsibility: creating a PvE session with the
+    // correct player/side mapping for a logged-in user. Does not wait for or assert
+    // anything about the bot's decisions — that's the unified cross-service check
+    // below, which uses the guest path instead (see its comment for why).
     let pveBrowser;
     try {
       const tokenPvE = await getAccessToken('pve');
@@ -383,15 +397,6 @@ async function main() {
       fail('PvE browser authenticates', err.message);
       process.exit(1);
     }
-
-    // Attach state collector before sending game:startAI so no frame is missed.
-    const pveFrames = [];
-    function pveStateCollector(data) {
-      let msg;
-      try { msg = JSON.parse(data.toString()); } catch { return; }
-      if (msg.type === 'game:state') pveFrames.push(msg);
-    }
-    pveBrowser.ws.on('message', pveStateCollector);
 
     pveBrowser.ws.send(JSON.stringify({ type: 'game:startAI', payload: { difficulty: 'hard' } }));
 
@@ -415,34 +420,11 @@ async function main() {
       fail('game:startAI → no match:matched within 3s', err.message);
     }
 
-    // Wait for the 3-second countdown + 8 seconds of live game time.
-    // Hard bot: reactionDelayMs=0, updateIntervalMs=16ms — reacts on the first tick
-    // after the game starts. With ~1.25s per rally and 50/50 initial ball direction,
-    // P(ball never reaches the bot's side in 8s) ≈ 1.5%.
-    await new Promise((resolve) => setTimeout(resolve, 11_500));
-
-    pveBrowser.ws.removeListener('message', pveStateCollector);
-
-    // Test 11: bot paddle actually moved — confirms ai-bot-service received
-    // ai-bot:state frames, ran its prediction logic, and sent game:botInput
-    // back through gateway-ws to game-service, which applied it to the physics.
-    if (pveFrames.length === 0) {
-      fail('PvE — no game:state frames received after countdown (ai-bot-service alive?)');
-    } else {
-      const firstRightY = pveFrames[0].payload.paddles.rightY;
-      const botMoved    = pveFrames.some((f) => f.payload.paddles.rightY !== firstRightY);
-      if (botMoved) {
-        const lastRightY = pveFrames[pveFrames.length - 1].payload.paddles.rightY;
-        pass(`PvE — AI paddle moved (${firstRightY} → ${lastRightY} over ${pveFrames.length} frames)`);
-      } else {
-        fail(`PvE — AI paddle static across ${pveFrames.length} frames — is ai-bot-service connected to gateway-ws?`);
-      }
-    }
-
-    // ── Tests 12-13: game:startAI — guest PvE (no account, guest token) ─────────
-    // Proves the cross-service wiring for unauthenticated play: auth-service issues
-    // the guest token, gateway-ws accepts it, game-service creates the PvE session,
-    // and the AI paddle moves — same end-to-end chain as the logged-in PvE case above.
+    // ── Tests 11-12: game:startAI — guest PvE session assignment ──────────────────
+    // Same shape check as 9-10, but for a guest token — proves the guest-auth chain
+    // (auth-service issuing the token, gateway-ws accepting a type:'guest' token for
+    // WS auth, game-service creating a session for a negative userId) reaches the
+    // same session-assignment logic. This path is also reused by Test 13 below.
     let guestBrowser;
     try {
       const guestToken = await getGuestToken();
@@ -482,22 +464,42 @@ async function main() {
       fail('guest game:startAI → no match:matched within 3s', err.message);
     }
 
-    // Wait for the 3-second countdown + 8 seconds of live game time.
+    // ── Test 13: cross-service check — guest PvE, AI paddle actually moves ────────
+    // Unified check for BOTH "does the bot's decision get applied to a real match"
+    // and "does the guest-token path reach a live session" — deliberately NOT
+    // duplicated for the logged-in PvE case above, which only asserts match:matched
+    // shape (Test 10) and never waits for paddle movement. Reasoning: the guest path
+    // gives strictly more coverage per second of wait, since Tests 11-12 already
+    // prove match:matched shape for guests, so this wait's only new contribution is
+    // the bot-movement confirmation — no need to pay the same ~11.5s wait twice for
+    // the logged-in case when it wouldn't prove anything not already covered by
+    // Test 10 (shape) or this test (movement, chain-wide).
+    //
+    // This is a cross-service integration check, not game-service's own concern:
+    // it chains ai-bot-service's decision logic (does the bot correctly track the
+    // ball), gateway-ws's message routing (does game:botInput reach game-service),
+    // and game-service's own physics application (does the paddle coordinate
+    // actually change) end-to-end. It lives in this file rather than
+    // ai-bot-service's own smoke test because gateway-ws routes game:botInput with
+    // no fan-out — only whoever holds the game-service registration slot receives
+    // it — so this is the only vantage point where that message's real-world effect
+    // is observable at all. See ai-bot-service/README.md's Smoke test section for
+    // the isolated counterpart that verifies ai-bot-service's own decision logic
+    // without this dependency.
     await new Promise((resolve) => setTimeout(resolve, 11_500));
 
     guestBrowser.ws.removeListener('message', guestStateCollector);
 
-    // Test 13: AI paddle moved for the guest session — same assertion as the logged-in PvE case.
     if (guestFrames.length === 0) {
-      fail('guest PvE — no game:state frames received after countdown (ai-bot-service alive?)');
+      fail('cross-service: guest PvE — no game:state frames received after countdown (ai-bot-service alive?)');
     } else {
       const firstRightY = guestFrames[0].payload.paddles.rightY;
       const botMoved    = guestFrames.some((f) => f.payload.paddles.rightY !== firstRightY);
       if (botMoved) {
         const lastRightY = guestFrames[guestFrames.length - 1].payload.paddles.rightY;
-        pass(`guest PvE — AI paddle moved (${firstRightY} → ${lastRightY} over ${guestFrames.length} frames)`);
+        pass(`cross-service: guest PvE — AI paddle moved (${firstRightY} → ${lastRightY} over ${guestFrames.length} frames)`);
       } else {
-        fail(`guest PvE — AI paddle static across ${guestFrames.length} frames`);
+        fail(`cross-service: guest PvE — AI paddle static across ${guestFrames.length} frames`);
       }
     }
 
