@@ -37,7 +37,7 @@ const SERVICE_SECRET = process.env.INTERNAL_SERVICE_SECRET;
 if (!SERVICE_SECRET) {
   console.error('INTERNAL_SERVICE_SECRET is not set.');
   console.error('Usage: INTERNAL_SERVICE_SECRET=<secret> node services/game-service/scripts/smoke-test.mjs');
-  process.exit(1);
+  process.exitCode = 1;
 }
 
 const TEST_MATCH_ID  = 99001;
@@ -98,17 +98,20 @@ function wsNextMatching(ws, predicate, timeoutMs = 500) {
 
 function wsClose(ws) {
   return new Promise((resolve) => {
+    if (ws.readyState === WebSocket.CLOSED) {
+      resolve(1000); // already closed — no 'close' event will fire again
+      return;
+    }
     ws.once('close', (code) => resolve(code));
   });
 }
 
 function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)
-    ),
-  ]);
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
@@ -175,7 +178,8 @@ async function main() {
     } catch (err) {
       console.error(`Could not obtain access tokens: ${err.message}`);
       console.error('Is the stack running? (make up + migrations applied)');
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // ── Test 1: browser1 authenticates ────────────────────────────────────────
@@ -186,7 +190,8 @@ async function main() {
       pass(`browser1 authenticates (userId: ${browser1.userId})`);
     } catch (err) {
       fail('browser1 authenticates', err.message);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // ── Test 2: browser2 authenticates ────────────────────────────────────────
@@ -197,7 +202,8 @@ async function main() {
       pass(`browser2 authenticates (userId: ${browser2.userId})`);
     } catch (err) {
       fail('browser2 authenticates', err.message);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // Outsider: connected to gateway-ws but NOT in the match's players map.
@@ -207,7 +213,8 @@ async function main() {
       sockets.push(browser3.ws);
     } catch (err) {
       fail('outsider browser connects', err.message);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // ── Test 3: internal connection registers as test-service ─────────────────
@@ -225,7 +232,8 @@ async function main() {
       pass('internal connection registers as test-service');
     } catch (err) {
       fail('internal connection registers as test-service', err.message);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // ── Tests 4-5: game:assign → both browsers receive game:state ─────────────
@@ -255,7 +263,8 @@ async function main() {
       pass('game:assign → both browsers receive game:state');
     } catch (err) {
       fail('game:assign → both browsers receive game:state', err.message);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // Test 5: validate initial state shape.
@@ -331,7 +340,8 @@ async function main() {
       sockets.push(browser2b.ws);
     } catch (err) {
       fail('forfeit test — browser connections', err.message);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // Attach listeners BEFORE game:assign so no message is missed.
@@ -361,7 +371,8 @@ async function main() {
       await withTimeout(firstState2b, 1000);
     } catch (err) {
       fail('forfeit test — session did not start (no game:state before disconnect)', err.message);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // Closing browser1b triggers player:disconnect → game-service starts 5s grace timer.
@@ -395,7 +406,8 @@ async function main() {
       pass(`PvE browser authenticates (userId: ${pveBrowser.userId})`);
     } catch (err) {
       fail('PvE browser authenticates', err.message);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     pveBrowser.ws.send(JSON.stringify({ type: 'game:startAI', payload: { difficulty: 'hard' } }));
@@ -433,7 +445,8 @@ async function main() {
       pass(`guest browser authenticates (userId: ${guestBrowser.userId}, negative = guest)`);
     } catch (err) {
       fail('guest browser authenticates', err.message);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     const guestFrames = [];
@@ -526,19 +539,23 @@ async function main() {
   } finally {
     // ── Test 15: clean shutdown ────────────────────────────────────────────────
     const closePromises = sockets.map((ws) => {
-      const p = wsClose(ws);
+    const p = wsClose(ws);
+    if (ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) {
       ws.close(1000);
-      return p;
-    });
+    }
+    return p;
+  });
     await Promise.all(closePromises);
     pass('all sockets closed cleanly (Test 15)');
   }
 
   console.log(`\n  ${passed} passed, ${failed} failed\n`);
-  process.exit(failed > 0 ? 1 : 0);
+  process.exitCode = failed > 0 ? 1 : 0;
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (SERVICE_SECRET) {
+  main().catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  });
+}
