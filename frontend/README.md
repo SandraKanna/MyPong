@@ -28,7 +28,13 @@ npm test
 
 21 files and 220 tests should pass: state and client layers — `gameStore` (6-phase state machine: idle→queued→matched→playing→paused→ended, including guest and cold-start reconnect edge cases), `profileState` (username status tracking, `useMyDisplayName`), `httpClient` (single-flight token refresh, retry-with-new-token, auth-path skip, refresh failure), `wsClient` (auth-on-open, no-op when not connected, per-type dispatch, unsubscribe, reconnect backoff up to the 3s cap), `auth` (login/register), and `profile` (`readErrorMessage` field-level vs. top-level vs. default fallback across every profile/avatar/stats/matches/lookup call). Component tests cover the full game UI (`CountdownOverlay`, `GameBoard` keyboard input and rendering, `GamePage` phase-aware unmount cleanup, `LobbyView`, `PauseOverlay`, `ResultScreen`), auth pages (`LoginPage`, `RegisterPage`), routing guards (`ProtectedRoute`, `PublicOnlyRoute`), and profile/stats (`ProfilePage`, `StatsDisclosure`, `StatsSummary`, `MatchHistoryTable`, `Navbar`).
 
-frontend has no Docker container or host-facing verification story of its own — nginx serves the compiled build. See [nginx's README](../nginx/README.md#testing) for the full build-and-serve verification, including its own smoke test covering the SPA being served correctly through the full auth flow.
+To list every test case individually instead of the per-file summary, run Vitest with the verbose reporter:
+
+```bash
+npx vitest run --reporter=verbose
+```
+
+> frontend has no Docker container or host-facing verification story of its own — nginx serves the compiled build. See [nginx's README](../nginx/README.md#testing) for the full build-and-serve verification, including its own smoke test covering the SPA being served correctly through the full auth flow.
 
 ## Dev server proxy
 

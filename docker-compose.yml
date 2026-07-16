@@ -56,6 +56,8 @@ services:
       - frontend-net
       - backend-net
     depends_on:
+    # service_healthy here guards startup order only (gateway-api calls out to both
+    # on every request) — not an ongoing runtime coupling.
       auth-service:
         condition: service_healthy
       user-service:

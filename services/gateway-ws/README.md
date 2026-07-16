@@ -76,6 +76,12 @@ npm test
 
 3 files and 34 tests should pass: WebSocket auth (valid/guest/refresh/wrong-secret/expired tokens, timeout, malformed first message, health endpoint), service registration and routing (register success/deny cases, stale-close safety, browser→service userId injection, service→browser fan-out, service→service routing, presence broadcast on connect/disconnect), and single-session replacement (4009 close, ordering of disconnect-before-connect broadcasts, unaffected sessions for other userIds).
 
+To list every test case individually instead of the per-file summary, run Vitest with the verbose reporter:
+
+```bash
+npx vitest run --reporter=verbose
+```
+
 ### Docker (full Compose stack)
 
 See the [root README](../../README.md#prerequisites) — `make up` starts the full stack (also applies migrations automatically), `docker ps -a` should show all 9 containers healthy (8 services + postgres).

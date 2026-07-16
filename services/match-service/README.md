@@ -70,6 +70,12 @@ npm test
 
 4 files and 37 tests should pass: the matchmaking queue (FIFO pairing, duplicate-join guard, guest rejection, cancel, disconnect cleanup), `match.service` (createMatch, closeMatch, findActiveMatch), the `matchResult` handler, and the WS internal client.
 
+To list every test case individually instead of the per-file summary, run Vitest with the verbose reporter:
+
+```bash
+npx vitest run --reporter=verbose
+```
+
 ### Docker (full Compose stack)
 
 See the [root README](../../README.md#prerequisites) — `make up` starts the full stack (also applies migrations automatically), `docker ps -a` should show all 9 containers healthy (8 services + postgres).
