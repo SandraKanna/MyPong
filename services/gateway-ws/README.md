@@ -28,7 +28,7 @@ gateway-ws maintains one browser socket per `userId`. A second connection authen
 
 ## Internal service connection
 
-Backend services (game-service, match-service, user-service) connect to gateway-ws at startup using a shared secret, not a JWT — same auth-by-first-message protocol as browsers (5s timeout, code 4001 on failure).
+Backend services (game-service, match-service, user-service, ai-bot-service) connect to gateway-ws at startup using a shared secret, not a JWT — same auth-by-first-message protocol as browsers (5s timeout, code 4001 on failure).
 
 | Step  |      Direction       |        Message 
 |-------|----------------------|----------------------------------------------------
@@ -36,7 +36,7 @@ Backend services (game-service, match-service, user-service) connect to gateway-
 | 2     | Service → gateway-ws | `{ "type": "service:register", "service": "<name>", "token": "<INTERNAL_SERVICE_SECRET>" }`
 | 3     | gateway-ws → Service | `{ "type": "registered" }` — connection is now authenticated
 
-`service` must be one of the known names: `game-service`, `match-service`, `user-service`, `test-service` (reserved for smoke tests). Any other name is rejected with code 4001.
+`service` must be one of the known names: `game-service`, `match-service`, `user-service`, `ai-bot-service`, `test-service` (reserved for smoke tests). Any other name is rejected with code 4001.
 
 ## Routing
 
@@ -47,6 +47,14 @@ gateway-ws routes messages between browsers and services with no business logic 
 **Service → service (type-prefix routing)**: a service message without a `to` field is routed by the prefix before the first `:` in the `type` field — e.g. `match:result` routes to `match-service`, `game:assign` routes to `game-service`. The prefix always names the **destination**, not the sender — `match:result` above is sent *by* game-service, not match-service. No rewriting of `type` or payload.
 
 **Browser → service (userId injection)**: gateway-ws injects the authenticated `userId` into every message received from a browser before forwarding it to the target service (derived from the validated JWT, never from the payload). A client-supplied `userId` in the message body is ignored.
+
+## Healthcheck
+
+gateway-ws serves a plain HTTP `GET /health` endpoint on the same port as its WebSocket server (4500), returning `200` as long as the server is listening. The Docker healthcheck is:
+
+```
+test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4500/health"]
+```
 
 ## Environment variables
 
@@ -66,11 +74,11 @@ npm install   # if you don't already have node_modules
 npm test
 ```
 
-3 files and 34 tests should pass.
+3 files and 34 tests should pass: WebSocket auth (valid/guest/refresh/wrong-secret/expired tokens, timeout, malformed first message, health endpoint), service registration and routing (register success/deny cases, stale-close safety, browser→service userId injection, service→browser fan-out, service→service routing, presence broadcast on connect/disconnect), and single-session replacement (4009 close, ordering of disconnect-before-connect broadcasts, unaffected sessions for other userIds).
 
 ### Docker (full Compose stack)
 
-See the [root README](../../README.md#prerequisites) — `make up` starts the full stack, `docker ps -a` should show all 9 containers healthy (8 services + postgres). gateway-ws itself has no database — its own healthcheck doesn't need migrations. But registering/logging in through the app (to actually get a WS session, see below) goes through auth-service and user-service, which do need their tables migrated first — see the [root README](../../README.md#prerequisites) for the migration commands.
+See the [root README](../../README.md#prerequisites) — `make up` starts the full stack (also applies migrations automatically), `docker ps -a` should show all 9 containers healthy (8 services + postgres).
 
 gateway-ws is normally reached only through nginx (`wss://<host>/ws`) — the browser never connects to port 4500 directly. To verify gateway-ws works, use the app itself:
 
@@ -94,7 +102,6 @@ Talks to gateway-ws directly (`:4500`) to test the WS auth protocol, and to gate
 2. Also uncomment gateway-api's `127.0.0.1:4010:4000` port mapping (marked `# Native dev only`) — the smoke test needs it to fetch a real access token.
 3. `make up`
 4. Confirm both are up: `docker ps -a` should show `127.0.0.1:4500->4500/tcp` and `127.0.0.1:4010->4000/tcp`.
-5. Run migrations (see [root README](../../README.md#prerequisites)) — gateway-ws needs a real registered user to get a JWT from. Skip if you already did this for the same DB volume.
 
 **Run:**
 
@@ -111,9 +118,18 @@ node services/gateway-ws/scripts/smoke-test.mjs ws://localhost:4500 http://local
 > service from routing (see "Internal service connection" above), with no
 > error and no automatic recovery.
 
+**Cleanup:** re-comment gateway-api's port mapping in the root `docker-compose.yml`, then recreate the container so the change takes effect (`start` reuses the existing container as-is; `up -d` recreates it, which is required to pick up a docker-compose.yml edit like this one). If you're **not** continuing to Local (native) below, also re-comment gateway-ws's port mapping and recreate that container the same way:
+
+```bash
+docker compose -p mypong up -d gateway-api
+docker compose -p mypong up -d gateway-ws   # only if you re-commented its port too
+```
+
 ### Local (native)
 
 Use this only if you're actively editing gateway-ws's own code and want instant reload instead of rebuilding the Docker image on every change.
+
+**Setup (once per fresh environment):**
 
 gateway-ws's port is commented out by default, so this needs no setup — unless you left it uncommented from the Smoke test above, in which case free it first:
 
@@ -121,14 +137,11 @@ gateway-ws's port is commented out by default, so this needs no setup — unless
 docker compose -p mypong stop gateway-ws
 ```
 
-This flow uses its own `.env` file, separate from the root one used by Docker:
+**Run:**
 
 ```bash
 cd services/gateway-ws
 cp .env.example .env   # fill in JWT_SECRET and INTERNAL_SERVICE_SECRET — must match the root .env values
-```
-
-```bash
 npm install   # if not already done for unit tests
 set -a && source .env && set +a
 npm run dev   # ws://localhost:4500
@@ -189,9 +202,12 @@ If the 5-second window passes before sending, the server closes with code 4001 �
 > but this native check succeeds, the bug is in `nginx.conf`'s `/ws` block,
 > not gateway-ws itself.
 
-**Cleanup:** stop the native process (`Ctrl+C`) and, if you uncommented
-gateway-ws's port mapping, re-comment it and restart the Docker container:
+**Cleanup:** stop the native process (`Ctrl+C`) and, if you uncommented gateway-ws's port mapping, re-comment it and recreate the Docker container so the change takes effect (`start` reuses the existing container as-is; `up -d` recreates it, which is required to pick up a docker-compose.yml edit like this one):
 
 ```bash
-docker compose -p mypong start gateway-ws
+docker compose -p mypong up -d gateway-ws
 ```
+
+## Gotchas / known limitations
+
+**A duplicate service registration silently orphans the previous one.** A second `service:register` under an already-registered name immediately overwrites the routing entry — the previous socket stays open but no longer receives anything, with no error on either side and no automatic recovery. The file-based healthchecks of the affected services don't detect it (their connection never closed). Recovery is manual: `docker compose -p mypong restart <service>`. This is why smoke tests register as `test-service`, never a real name — with one deliberate, documented exception in [ai-bot-service's README](../ai-bot-service/README.md#smoke-test).

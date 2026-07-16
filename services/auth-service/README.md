@@ -9,12 +9,22 @@ Handles registration, login, token refresh, and logout. Issues short-lived JWT a
 | `POST`   | `/register` | Create account — email + password (argon2 hash); returns access token in body, refresh token as httpOnly cookie, same as `/login` |
 | `POST`   | `/login`    | Returns access token in body; refresh token as httpOnly cookie; revokes any previously active refresh tokens for this user (single session per account) |
 | `POST`   | `/refresh`  | Returns new access token in body, rotates refresh cookie        |
+| `POST`   | `/guest`    | Returns ephemeral access token (15 min, negative userId, no DB row, no refresh token, no cookie) — PvE play without an account |
 | `DELETE` | `/session`  | Revokes refresh token (logout)                  |
 
 These paths are without the `/api/auth` prefix — that prefix is added by gateway-api when proxying. Direct calls to auth-service use the bare paths.
 
-**Single session per account.** Each successful `/login` revokes every refresh token row still active for that `user_id` (`revoked_at IS NULL`) before issuing a new one — a second login effectively logs out any other session for the same account. This only happens on `/login`: `/register` has no prior session to revoke, and `/guest` never issues a refresh token at all. The access token from a superseded session keeps working until it expires (up to 15 minutes) or until its own `/refresh` is attempted, whichever comes first — `/refresh` checks `revoked_at` and rejects a revoked token immediately. gateway-ws separately closes the superseded session's WebSocket connection with code `4009` as soon as the new login's connection replaces it — see [gateway-ws's README](../gateway-ws/README.md#single-session-per-user).
+### Single session per account
 
+Each successful `/login` revokes every refresh token row still active for that `user_id` (`revoked_at IS NULL`) before issuing a new one — a second login effectively logs out any other session for the same account. This only happens on `/login`: `/register` has no prior session to revoke, and `/guest` never issues a refresh token at all. The access token from a superseded session keeps working until it expires (up to 15 minutes) or until its own `/refresh` is attempted, whichever comes first — `/refresh` checks `revoked_at` and rejects a revoked token immediately. gateway-ws separately closes the superseded session's WebSocket connection with code `4009` as soon as the new login's connection replaces it — see [gateway-ws's README](../gateway-ws/README.md#single-session-per-user).
+
+## Healthcheck
+
+auth-service's healthcheck is plain HTTP: `GET /health` on port 4001 returns `200` as long as the Fastify server is listening — it performs no database query. The Docker healthcheck is:
+
+```
+test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4001/health"]
+```
 
 ## Environment variables
 
@@ -34,7 +44,7 @@ cd services/auth-service
 npm install # if you don't already have node_modules
 npm test
 ```
-1 file and 18 tests should pass.
+1 file and 18 tests should pass: `auth-service routes` — register (success, duplicate email, DB error, invalid input), login (success, session revocation on re-login, wrong password and unknown email both returning the same 401), refresh (success, already-rotated token, invalid signature, missing cookie), logout (valid token, invalid token, no cookie, DB failure — all idempotent), and guest token issuance.
 
 ### Docker (full Compose stack)
 
@@ -70,9 +80,8 @@ Runs against gateway-api (default: `:4010`), not auth-service directly — the r
 **Setup (once per fresh environment):**
 
 1. Uncomment gateway-api's `127.0.0.1:4010:4000` port mapping in the root `docker-compose.yml` (see [gateway-api's README](../gateway-api/README.md#docker-full-compose-stack)) — this exposes it to the host.
-2. `make up`
+2. `make up` — also applies pending migrations automatically.
 3. Confirm gateway-api is up: `docker ps -a` should show `127.0.0.1:4010->4000/tcp`.
-4. Run migrations (see [root README](../../README.md#prerequisites)) — skip if you already did this for the same DB volume.
 
 **Run:**
 
@@ -82,6 +91,12 @@ cd services/auth-service
 ```
 
 12 cases: register (new + duplicate + invalid input), login (valid + wrong password), refresh (valid + rotated-token-rejected + after-logout + no-cookie), logout, guest token issuance, and guest token rejected on a protected REST route.
+
+**Cleanup:** re-comment gateway-api's port mapping in the root `docker-compose.yml`, then recreate the container so the change takes effect (`start` reuses the existing container as-is; `up -d` recreates it, which is required to pick up a docker-compose.yml edit like this one):
+
+```bash
+docker compose -p mypong up -d gateway-api
+```
 
 ### Local (native, faster iteration)
 
@@ -133,14 +148,14 @@ Expected: `201` with an `accessToken` in the body. Note the bare path (`/registe
 
 You can test other endpoints the same way against `http://localhost:4001` (`/login`, `/refresh`, `/session`) — see the Endpoints table above for request shapes. Direct calls here don't carry the cookie path restriction gateway-api has (see Gotchas).
 
-**Cleanup:** stop the native process (`Ctrl+C`) and, if you're done with this flow entirely, remove the standalone Postgres container — it's outside the Compose project, so `make down`/`make fclean` won't touch it:
+**Cleanup:** stop the native process (`Ctrl+C`). The standalone `mypong-pg-dev` container is shared with match-service's native flow (see [match-service's README](../match-service/README.md#local-native-faster-iteration)) — leave it running unless you're done with native dev entirely across all services. If you are, remove it (it's outside the Compose project, so `make down`/`make fclean` won't touch it):
 
 ```bash
 docker stop mypong-pg-dev
 docker rm mypong-pg-dev
 ```
 
-## Gotchas
+## Gotchas / known limitations
 
 **Refresh cookie requires HTTPS.** The refresh token cookie is set with the `Secure` flag, so browsers only send it back over `https://` — never over plain `http://`. This matches how the stack normally runs (`https://localhost` via nginx), so it isn't an issue in the standard `make up` flow. It only bites if you access the backend over plain HTTP for some reason: `/register` or `/login` will still look like they worked (the response includes `Set-Cookie`), but the browser silently drops it, so `/api/auth/refresh` will keep failing with no obvious error. Workaround for local dev: temporarily set `NODE_ENV: development` in docker-compose.yml (don't commit) to remove the `Secure` flag while debugging.
 

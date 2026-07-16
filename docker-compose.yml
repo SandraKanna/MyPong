@@ -110,6 +110,12 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      # Native dev only: drops the refresh cookie's Secure flag so it survives
+      # over plain http:// (e.g. the frontend's native Vite dev server on
+      # :3000) [see services/auth-service/README.md, "Gotchas" — Refresh
+      # cookie requires HTTPS]. Commented by default — uncomment while using
+      # that flow, never commit uncommented.
+      # NODE_ENV: development
     networks:
       - backend-net
     depends_on:

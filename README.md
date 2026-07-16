@@ -2,7 +2,7 @@
 
 A real-time multiplayer Pong game: 1v1 online, matchmaking, and an AI opponent. Built as a full-stack portfolio project using a microservices architecture.
 
-MyPong reimplements the scope of Transcendence, a 42 School capstone project, from scratch — same core requirements (real-time gameplay, JWT auth, microservices), rebuilt with modern tooling and stronger engineering practices (TypeScript throughout, CI/CD, consistent test coverage) than the original assignment required.
+MyPong reimplements the scope of Transcendence, a 42 School capstone project, from scratch — same core requirements (real-time gameplay, JWT auth, microservices), rebuilt with modern tooling and stronger engineering practices (TypeScript throughout, test automation and CI, consistent test coverage) than the original assignment required.
 
 
 > **Active development** — see [Phase plan](#phase-plan) below for current status.
@@ -17,10 +17,11 @@ MyPong reimplements the scope of Transcendence, a 42 School capstone project, fr
 - **gateway-ws** — WebSocket hub: browser auth, message routing by type prefix, user-targeted delivery
 - **game-service** — real-time physics (ball, paddles, score), session lifecycle, pause/reconnect grace window
 - **match-service** — FIFO matchmaking queue, match creation and closure, history event emission
-- **Public Edge (nginx)** — TLS termination, reverse proxy, static frontend serving
+- **ai-bot-service** — AI opponent for PvE matches, guest and logged-in play, difficulty presets
+- **Public Edge (nginx)** — TLS termination, reverse proxy, static frontend serving, avatar serving
 - **frontend** — login/register, protected routing, profile + avatar, 1v1 game (lobby, countdown, live board, pause overlay, result screen)
 
-See each service's README for endpoint-level detail and setup.
+See [Running a service locally](#running-a-service-locally) below for endpoint-level detail on each piece.
 
 AI opponent and guest mode are fully implemented. Tournament mode — part of Transcendence's original requirements — was evaluated and intentionally left out of this rebuild's scope; see the note under [Phase plan](#phase-plan).
 
@@ -39,18 +40,17 @@ cp .env.example .env
 ```
 
 Fill in `JWT_SECRET`, `JWT_REFRESH_SECRET`, `INTERNAL_SERVICE_SECRET` and `POSTGRES_PASSWORD` — then update
-`DATABASE_URL` to use that same password (it appears twice in the file; the
-comment in `.env.example` explains why).
+`DATABASE_URL` to use that same password.
 
-`make up` then starts the implemented stack. See each service's README for endpoint-level testing.
-
-The database starts empty on a fresh stack (or after `make fclean`/`make rebuild`) — run all three migration sets once, in this order (`user-service`'s tables have a foreign key into `auth-service`'s `users` table, so it must run second, not first):
+nginx also requires a TLS certificate to start. Generate a self-signed one for local dev, from the repo root:
 
 ```bash
-docker compose -p mypong exec auth-service npx node-pg-migrate up --migrations-table pgmigrations_auth
-docker compose -p mypong exec user-service npx node-pg-migrate up --migrations-table pgmigrations_user
-docker compose -p mypong exec match-service npx node-pg-migrate up --migrations-table pgmigrations_match
+./scripts/generate-dev-cert.sh
 ```
+
+This is a one-time step (no-op if the certs already exist, `--force` to regenerate) — see [nginx's README](nginx/README.md#tls-certificates-local-dev) for what it generates (2048-bit RSA, `CN=localhost`, 365-day validity) and why it's needed. Without it, the `nginx` container fails to start: `nginx.conf` requires `nginx/certs/cert.pem` and `key.pem` to exist.
+
+`make up` then starts the implemented stack — also applying all pending migrations automatically (`auth-service`, then `user-service`, then `match-service`, in that order since `user-service`'s tables have a foreign key into `auth-service`'s `users` table).
 
 ---
 
@@ -64,6 +64,9 @@ Each service has its own README with the full setup (Docker + native) and smoke 
 - [`services/user-service/README.md`](services/user-service/README.md)
 - [`services/game-service/README.md`](services/game-service/README.md)
 - [`services/match-service/README.md`](services/match-service/README.md)
+- [`services/ai-bot-service/README.md`](services/ai-bot-service/README.md)
+- [`nginx/README.md`](nginx/README.md)
+- [`frontend/README.md`](frontend/README.md)
 
 ---
 
@@ -86,9 +89,9 @@ The frontend (including Public Edge/nginx) runs as a separate job: **lint → ty
 | Phase 3 | gateway-ws hub + game-service (physics, session lifecycle, pause/reconnect) + match-service (matchmaking, match lifecycle, stats/history recording) (Done)
 | Phase 4 | Full game frontend: lobby, 3s countdown, live board, pause overlay, result screen (Done)
 | Phase 5 | ai-bot-service + guest mode (Done)
-| Phase 6 | Profile stats frontend, i18n, in-game UX polish (player names during a match) (Pending)
-| Phase 7 | Unit test coverage review across all services (Pending)
-| Phase 8 | Full CI and basic CD + final README (Pending)
+| Phase 6 | Onboarding polish, batch profile lookup, profile stats frontend, in-match username display, single-session-per-user enforcement (Done).
+| Phase 7 | Unit test coverage review across all services (In progress)
+| Phase 8 | Full CI coverage across all services + final README (Pending)
 
 tournament-service was fully designed (DB schema + WebSocket contracts) but intentionally left out of this portfolio's scope — the architectural pattern it would demonstrate (a WebSocket-client service with its own database, connected to the gateway) is already fully demonstrated by match-service.
 

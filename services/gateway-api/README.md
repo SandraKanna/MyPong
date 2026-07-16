@@ -22,6 +22,14 @@ All routes are under `/api/`. Public routes pass through without JWT validation;
 The `/api/auth` prefix is stripped before proxying — auth-service receives `/register`, `/login`, etc. (see [auth-service README](../auth-service/README.md)).
 The `/api/users` prefix is stripped similarly — user-service receives `/me`, `/:id/stats`, etc.
 
+## Healthcheck
+
+gateway-api's healthcheck is plain HTTP: `GET /health` on port 4000 returns `200` as long as the Fastify server is listening — it does not probe the upstream services it proxies to. The Docker healthcheck is:
+
+```
+test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/health"]
+```
+
 ## Environment variables
 
 - `PORT` (required) — HTTP port gateway-api listens on
@@ -41,7 +49,7 @@ npm install # if you don't already have node_modules
 npm test
 ```
 
-4 files and 39 tests should pass.
+4 files and 39 tests should pass: the JWT auth plugin (public routes, missing/malformed/wrong-secret/expired/wrong-type tokens, valid token sets `request.userId`), `authProxyRoutes` (prefix stripping, method/body forwarding, upstream status and body passthrough, cookie forwarding in both directions, content-type handling, 502 on fetch failure), `proxyRequest`'s `x-user-id` header injection, and `userProxyRoutes` (prefix stripping, method/body forwarding, upstream passthrough, `x-user-id` injection, multipart forwarding).
 
 ### Docker (full Compose stack)
 
@@ -81,17 +89,24 @@ cd services/gateway-api
 
 4 cases: health check and three JWT deny cases (`/api/users/me` without auth, with malformed token, without Bearer prefix). Auth flow is covered by the auth-service smoke test.
 
+**Cleanup:** re-comment gateway-api's port mapping in the root `docker-compose.yml`, then recreate the container so the change takes effect (`start` reuses the existing container as-is; `up -d` recreates it, which is required to pick up a docker-compose.yml edit like this one):
+
+```bash
+docker compose -p mypong up -d gateway-api
+```
+
 ### Local (native)
 
 Use this only if you're actively editing gateway-api's own code and want instant reload instead of rebuilding the Docker image on every change.
-gateway-api runs directly with Node; auth-service and Postgres run via `make up`. user-service has no native flow, so it stays in Docker regardless — `/api/users/*` routes won't be reachable while gateway-api runs natively, since it always proxies those to user-service over the Docker network only.
+
+gateway-api runs directly with Node; auth-service and Postgres run via `make up`. user-service has no native flow, so it stays in Docker regardless.
 
 **Setup (once per fresh environment):**
 
-1. Uncomment auth-service's `127.0.0.1:4001:4001` port mapping in the root `docker-compose.yml` (marked `# Native dev only`) — gateway-api's `.env.example` points `AUTH_SERVICE_URL` at `http://localhost:4001`; without this, every request through the native gateway-api fails with connection refused.
-2. `docker compose -p mypong up -d auth-service`
-3. `docker compose -p mypong stop gateway-api` — frees the port for the native process.
-4. Run migrations (see [root README](../../README.md#prerequisites)) — skip if you already did this for the same DB volume.
+1. Make sure the full stack is already up (`make up` from the repo root — also applies pending migrations automatically).
+2. Uncomment auth-service's `127.0.0.1:4001:4001` port mapping in the root `docker-compose.yml` (marked `# Native dev only`) — gateway-api's `.env.example` points `AUTH_SERVICE_URL` at `http://localhost:4001`; without this, every request through the native gateway-api fails with connection refused.
+3. `docker compose -p mypong up -d auth-service` — recreates it with the port mapping active.
+4. `docker compose -p mypong stop gateway-api` — frees the port for the native process.
 
 This flow uses its own `.env` file, separate from the root one used by Docker:
 
@@ -135,3 +150,7 @@ You can also point `./scripts/smoke-test.sh http://localhost:<PORT>` at this nat
 docker compose -p mypong up -d auth-service   # picks up the re-commented port
 docker compose -p mypong start gateway-api    # was stopped in Setup step 3
 ```
+
+## Gotchas / known limitations
+
+**`/api/users/*` is unreachable in the native flow.** user-service has no native flow of its own and no host port mapping — it only exists on the Docker network. A natively-running gateway-api therefore can't proxy `/api/users/*` anywhere; only the `/api/auth/*` routes (via auth-service's uncommented port) work in that setup. This is a limitation of the native dev flow, not of the service itself.
