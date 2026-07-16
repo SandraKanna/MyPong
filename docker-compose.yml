@@ -45,8 +45,8 @@ services:
     # Native dev only: needed for the native Vite proxy and this service's
     # own smoke test [see services/gateway-api/README.md, "Local (native)"].
     # Commented by default — uncomment while using that flow.
-    ports:
-      - "127.0.0.1:4010:4000"
+    # ports:
+    #   - "127.0.0.1:4010:4000"
     environment:
       PORT: "4000"
       JWT_SECRET: ${JWT_SECRET}
@@ -76,8 +76,8 @@ services:
     # Native dev only: needed by gateway-ws's own smoke test, or when
     # game-service/match-service run natively [see services/gateway-ws/README.md,
     # "Local (native)"]. Commented by default — uncomment while using that flow.
-    ports:
-      - "127.0.0.1:4500:4500"
+    # ports:
+    #   - "127.0.0.1:4500:4500"
     environment:
       PORT: "4500"
       JWT_SECRET: ${JWT_SECRET}

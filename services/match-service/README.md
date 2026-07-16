@@ -110,6 +110,13 @@ node services/match-service/scripts/smoke-test.mjs ws://localhost:4500 http://lo
 
 > **Known side effect**: the smoke test leaves a `match:result` with `status: 'forfeit'` and score `0–0` in `user_match_history` when the sockets close after `match:matched` — the disconnect mid-match triggers the same forfeit path as a real disconnection. This is pre-existing game-service behavior that becomes visible here now that user-service consumes `user:matchRecorded`.
 
+**Cleanup:** re-comment gateway-api's port mapping in the root `docker-compose.yml`, then recreate the container so the change takes effect (`start` reuses the existing container as-is; `up -d` recreates it, which is required to pick up a docker-compose.yml edit like this one). If you're **not** continuing to Local (native) below, also re-comment gateway-ws's port mapping and recreate that container the same way:
+
+```bash
+docker compose -p mypong up -d gateway-api
+docker compose -p mypong up -d gateway-ws   # only if you re-commented its port too
+```
+
 ### Local (native, faster iteration)
 
 Use this only if you're actively editing match-service's own code and want instant reload instead of rebuilding the Docker image on every change.
@@ -118,7 +125,7 @@ match-service connects outbound to gateway-ws and Postgres — no FK dependencie
 
 **Setup (once per fresh environment):**
 
-1. Uncomment gateway-ws's `127.0.0.1:4500:4500` port mapping in the root `docker-compose.yml` (marked `# Native dev only`) — the native process needs to reach it from the host.
+1. gateway-ws's port may already be uncommented if you just ran the Smoke test above — if not, uncomment gateway-ws's `127.0.0.1:4500:4500` port mapping in the root `docker-compose.yml` (marked `# Native dev only`) — the native process needs to reach it from the host.
 2. `make up`
 3. Confirm gateway-ws is up: `docker ps -a` should show `127.0.0.1:4500->4500/tcp`.
 4. Stop just the match-service container (leave gateway-ws and the rest running):

@@ -71,10 +71,6 @@ npm run dev   # http://localhost:3000
 
 Open `http://localhost:3000`, register or log in, and confirm the page loads correctly with no proxy errors in the terminal.
 
-> **Session persistence is limited in this flow.** The refresh token cookie is set with the `Secure` flag (see [auth-service's README](../services/auth-service/README.md#gotchas)), so it never survives over plain `http://localhost:3000`. Login works and the access token stays valid in memory, but any action that triggers a token refresh (page bootstrap, background checks) gets a `401` on `/api/auth/refresh` and cascades to a logout within seconds. Workaround: set `NODE_ENV: development` in the root `docker-compose.yml` for auth-service (don't commit) to drop the `Secure` flag while doing native frontend dev — see auth-service's own native-dev flow for the same workaround.
-
-> **Session drops right after login in dev mode.** React's StrictMode double-invokes effects on mount (mount→unmount→mount) as a deliberate dev-only check. This makes `useWsSession`'s connection effect register two WS sessions for the same user in quick succession — gateway-ws's single-session-per-user rule (see [gateway-ws's README](../services/gateway-ws/README.md#single-session-per-user)) then closes the first one with code `4009`, and the app reads that as "signed in elsewhere" even though nothing else was actually connected. Confirmed absent in the production build (`https://localhost` via nginx, no StrictMode double-invoke) — this is a `npm run dev`-only quirk, not a real session conflict. Not yet fixed at the code level (see CLAUDE.md pendientes).
-
 **Cleanup:** 
 
 Once you're done with `npm run dev`, re-comment both port mappings in the root `docker-compose.yml` and recreate the containers again so the change takes effect:
@@ -86,7 +82,7 @@ docker compose -p mypong up -d gateway-ws
 
 > **Session persistence is limited in this flow.** The refresh token cookie is set with the `Secure` flag (see [auth-service's README](../services/auth-service/README.md#gotchas)), so it never survives over plain `http://localhost:3000`. Login works and the access token stays valid in memory, but any action that triggers a token refresh (page bootstrap, background checks) gets a `401` on `/api/auth/refresh` and cascades to a logout within seconds. Workaround: set `NODE_ENV: development` in the root `docker-compose.yml` for auth-service (don't commit) to drop the `Secure` flag while doing native frontend dev — see auth-service's own native-dev flow for the same workaround.
 
-> **Session drops right after login in dev mode.** React's StrictMode double-invokes effects on mount (mount→unmount→mount) as a deliberate dev-only check. This makes `useWsSession`'s connection effect register two WS sessions for the same user in quick succession — gateway-ws's single-session-per-user rule (see [gateway-ws's README](../services/gateway-ws/README.md#single-session-per-user)) then closes the first one with code `4009`, and the app reads that as "signed in elsewhere" even though nothing else was actually connected. Confirmed absent in the production build (`https://localhost` via nginx, no StrictMode double-invoke) — this is a `npm run dev`-only quirk, not a real session conflict. Not yet fixed at the code level (see CLAUDE.md pendientes).
+> **StrictMode double-invoke and the WS singleton.** In dev, React's StrictMode double-invokes effects on mount (mount→unmount→mount) as a deliberate check. `useWsSession`'s connection effect handles this safely: `connectWs()` captures a local reference to its own WebSocket instance, and every handler (`onopen`, `onmessage`, `onclose`) checks that the module-level singleton still points to that same instance before acting. A superseded instance from an earlier invocation becomes a no-op instead of fighting the current one for the same session. No dropped session or spurious `4009` disconnect results from the double-invoke.
 
 ## Directory structure
 
@@ -124,7 +120,9 @@ The game UI is driven by a 6-phase Zustand state machine in `features/game/state
 
 The WS singleton (`shared/ws/wsClient.ts`) auto-reconnects with exponential backoff (500ms initial, 3s cap) — fast enough to beat game-service's 5-second disconnect grace window. `disconnectWs()` suppresses the reconnect loop (intentional logout/leave, not a crash).
 
-Physics constants (paddle speed, ball speed, board dimensions) are duplicated by hand from `services/game-service/src/physicsConfig.ts` into `features/game/components/GameBoard.tsx`. There is no shared package — if a physics constant changes in game-service, `GameBoard.tsx` must be updated manually.
+## Gotchas / known limitations
+
+- **Physics constants are duplicated by hand.** `features/game/components/GameBoard.tsx` duplicates paddle speed, ball speed, and board dimensions from `services/game-service/src/physicsConfig.ts`. There is no shared package between frontend and backend for this — if a physics constant changes in game-service, `GameBoard.tsx` must be updated manually to match.
 
 ## STUDY: comments
 
