@@ -6,7 +6,7 @@ import '@fastify/multipart'; // pulls in type augmentation for request.file()
 import sharp from 'sharp';
 import * as userService from '../services/user.service';
 import * as statsService from '../services/stats.service';
-import { patchMeSchema, userLookupQuerySchema } from '../schemas/user.schemas';
+import { patchMeSchema, userLookupQuerySchema, idParamSchema, matchesQuerySchema } from '../schemas/user.schemas';
 import { getUserId } from '../lib/getUserId';
 import { detectImageType } from '../lib/detectImageType';
 import { config } from '../config';
@@ -24,6 +24,13 @@ function fieldErrors(error: z.ZodError): Record<string, string[]> {
   return Object.fromEntries(
     Object.entries(tree.properties ?? {}).map(([k, v]) => [k, v.errors ?? []]),
   );
+}
+
+// :id/stats and :id/matches predate the details-object convention above —
+// their documented contract is a single flat { error: string }, so this
+// pulls just the first Zod issue's message instead of building a details map.
+function firstIssueMessage(error: z.ZodError): string {
+  return error.issues[0].message;
 }
 
 export const userRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -178,13 +185,12 @@ export const userRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       return reply.status(401).send({ error: 'Missing or invalid user identity' });
     }
 
-    const { id: rawId } = request.params as { id: string };
-    const targetId = Number(rawId);
-    if (!Number.isInteger(targetId) || targetId <= 0) {
-      return reply.status(400).send({ error: 'Invalid user id' });
+    const parsedId = idParamSchema.safeParse(request.params);
+    if (!parsedId.success) {
+      return reply.status(400).send({ error: firstIssueMessage(parsedId.error) });
     }
 
-    const stats = await statsService.getStats(targetId);
+    const stats = await statsService.getStats(parsedId.data.id);
     return reply.status(200).send(stats);
   });
 
@@ -194,19 +200,18 @@ export const userRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       return reply.status(401).send({ error: 'Missing or invalid user identity' });
     }
 
-    const { id: rawId } = request.params as { id: string };
-    const targetId = Number(rawId);
-    if (!Number.isInteger(targetId) || targetId <= 0) {
-      return reply.status(400).send({ error: 'Invalid user id' });
+    const parsedId = idParamSchema.safeParse(request.params);
+    if (!parsedId.success) {
+      return reply.status(400).send({ error: firstIssueMessage(parsedId.error) });
     }
 
-    const rawQuery = request.query as Record<string, string | undefined>;
-    const limit  = Number(rawQuery.limit  ?? '20');
-    const offset = Number(rawQuery.offset ?? '0');
+    const parsedQuery = matchesQuerySchema.safeParse(request.query);
+    if (!parsedQuery.success) {
+      return reply.status(400).send({ error: firstIssueMessage(parsedQuery.error) });
+    }
 
-    if (!Number.isInteger(limit)  || limit  < 1) return reply.status(400).send({ error: 'limit must be a positive integer' });
-    if (!Number.isInteger(offset) || offset < 0)  return reply.status(400).send({ error: 'offset must be a non-negative integer' });
-    if (limit > 50) return reply.status(400).send({ error: 'limit must not exceed 50' });
+    const { id: targetId } = parsedId.data;
+    const { limit, offset } = parsedQuery.data;
 
     const matches = await statsService.getMatchHistory(targetId, limit, offset);
     return reply.status(200).send({ userId: targetId, matches, limit, offset });

@@ -299,6 +299,17 @@ describe('user-service routes', () => {
       expect(res.json()).toMatchObject({ error: 'limit must not exceed 50' });
     });
 
+    it('returns 400 for non-numeric limit', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/42/matches?limit=abc',
+        headers: { 'x-user-id': '1' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'limit must be a positive integer' });
+    });
+
     it('returns 400 for non-numeric offset', async () => {
       const res = await app.inject({
         method: 'GET',
