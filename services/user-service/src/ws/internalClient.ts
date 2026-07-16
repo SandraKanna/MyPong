@@ -7,6 +7,9 @@ export interface InternalClient {
   onMessage(type: string, handler: (msg: WsEnvelope) => void): void;
   // Stop reconnecting and close the current connection (e.g. on SIGTERM).
   close(): void;
+  // Same readyState check send() already uses to decide OPEN vs. queue —
+  // exposed so callers (e.g. /health) can report the live connection state.
+  isConnected(): boolean;
 }
 
 interface CreateInternalClientOpts {
@@ -118,6 +121,10 @@ export function createInternalClient(opts: CreateInternalClientOpts): InternalCl
     close(): void {
       stopped = true;
       ws.close();
+    },
+
+    isConnected(): boolean {
+      return ws.readyState === WebSocket.OPEN;
     },
   };
 }

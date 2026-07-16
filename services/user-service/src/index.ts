@@ -5,15 +5,17 @@ import { recordMatchResult }     from './services/match.service';
 import { handleMatchRecorded }   from './handlers/matchRecorded';
 
 async function main() {
-  const app = await buildApp();
-
+  // wsClient created before buildApp() so /health can read its live connection
+  // state via getWsConnected — no healthFilePath here, since the HTTP
+  // /health route now reports the WS connection itself instead of a
+  // Docker-level file check.
   const wsClient = createInternalClient({
     url:         config.GATEWAY_WS_URL,
     secret:      config.INTERNAL_SERVICE_SECRET,
     serviceName: 'user-service',
-    // No healthFilePath — healthcheck is HTTP-based (port 4002/health),
-    // independent of the WS connection state.
   });
+
+  const app = await buildApp({ getWsConnected: () => wsClient.isConnected() });
 
   wsClient.onMessage('user:matchRecorded', (msg) => {
     void handleMatchRecorded(msg.payload, recordMatchResult);

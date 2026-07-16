@@ -9,11 +9,25 @@ import { userRoutes } from './routes/user.routes';
 // without hardcoding a magic number.
 export const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 
-export async function buildApp(): Promise<FastifyInstance> {
+interface BuildAppOptions {
+  // Reports the internalClient's live WS connection to gateway-ws. A
+  // container that can serve HTTP but has lost that connection can't
+  // receive user:matchRecorded — /health folds both signals into one
+  // check rather than reporting HTTP liveness alone. Defaults to always
+  // connected so tests and any other caller without a real WS client
+  // get plain HTTP-liveness behavior, unchanged from before this option existed.
+  getWsConnected?: () => boolean;
+}
+
+export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
+  const { getWsConnected = () => true } = opts;
   const fastify = Fastify({ logger: process.env.NODE_ENV !== 'test' });
 
   fastify.get('/health', async (_request, reply) => {
-    return reply.status(200).send({ status: 'ok' });
+    const wsConnected = getWsConnected();
+    return reply
+      .status(wsConnected ? 200 : 503)
+      .send({ status: wsConnected ? 'ok' : 'degraded', wsConnected });
   });
 
   await fastify.register(multipart, {
