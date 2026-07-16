@@ -64,6 +64,12 @@ npm test
 
 4 files and 97 tests should pass: `GameSessionManager` (assign/input handling, pause/resume and forfeit grace windows, countdown-window disconnects, voluntary leave, PvE session lifecycle and difficulty-based physics overrides), `Ball` (wall bounce, reverseX, speed clamping, reset), `Game` (initial state, paddle movement and clamping, pause/resume, scoring and serve direction, paddle collision), and the WS internal client (registration, message dispatch, reconnect, health file, pending queue).
 
+To list every test case individually instead of the per-file summary, run Vitest with the verbose reporter:
+
+```bash
+npx vitest run --reporter=verbose
+```
+
 ### Docker (full Compose stack)
 
 See the [root README](../../README.md#prerequisites) — `make up` starts the full stack, `docker ps -a` should show all 9 containers healthy (8 services + postgres). game-service itself has no `DATABASE_URL` — its own healthcheck doesn't need migrations, but the two players used to verify it below do need real accounts.

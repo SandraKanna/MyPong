@@ -51,6 +51,12 @@ npm test
 
 3 files and 43 tests should pass: `BotSessionManager` (session start/end, reaction delay and update-interval throttling, direction correction and stop-zone behavior, target stability and re-targeting on ball reversal, per-difficulty tracking error and deliberate-miss behavior), `predictBallY` (wall-bounce reflection, multiple bounces, valid-range invariant), and the WS internal client (registration, message dispatch, reconnect, health file, pending queue).
 
+To list every test case individually instead of the per-file summary, run Vitest with the verbose reporter:
+
+```bash
+npx vitest run --reporter=verbose
+```
+
 ### Docker (full Compose stack)
 
 See the [root README](../../README.md#prerequisites) — `make up` starts the full stack, `docker ps -a` should show all 9 containers healthy (8 services + postgres). ai-bot-service itself has no `DATABASE_URL` — its own healthcheck doesn't need migrations.
