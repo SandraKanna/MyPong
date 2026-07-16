@@ -33,7 +33,7 @@ const SERVICE_SECRET = process.env.INTERNAL_SERVICE_SECRET;
 if (!SERVICE_SECRET) {
   console.error('INTERNAL_SERVICE_SECRET is not set.');
   console.error('Usage: INTERNAL_SERVICE_SECRET=<secret> node services/ai-bot-service/scripts/smoke-test.mjs');
-  process.exit(1);
+  process.exitCode = 1;
 }
 
 // Shared physics config for every session — values only need to be internally
@@ -84,12 +84,11 @@ function wsClose(ws) {
 }
 
 function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)
-    ),
-  ]);
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 // Resolves with the next message satisfying predicate, or rejects after timeoutMs.
@@ -162,7 +161,8 @@ async function main() {
     } catch (err) {
       fail('internal connection registers as game-service', err.message);
       console.error('Is the real game-service container stopped? (docker compose -p mypong stop game-service)');
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // ── Test: ball above paddle center → bot moves up ─────────────────────────
@@ -236,10 +236,12 @@ async function main() {
   console.log(`\n  ${passed} passed, ${failed} failed\n`);
   console.error('  Reminder: restart the real game-service container now:');
   console.error('    docker compose -p mypong start game-service\n');
-  process.exit(failed > 0 ? 1 : 0);
+  process.exitCode = failed > 0 ? 1 : 0;
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (SERVICE_SECRET) {
+  main().catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  });
+}

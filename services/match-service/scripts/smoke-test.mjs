@@ -80,12 +80,11 @@ function wsClose(ws) {
 }
 
 function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)
-    ),
-  ]);
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
@@ -152,7 +151,8 @@ async function main() {
     } catch (err) {
       console.error(`Could not obtain access tokens: ${err.message}`);
       console.error('Is the stack running? (make up + migrations applied)');
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // ── Test 1: two browsers authenticate ─────────────────────────────────────
@@ -166,7 +166,8 @@ async function main() {
       pass(`browser2 authenticates (userId: ${browser2.userId})`);
     } catch (err) {
       fail('browser authentication', err.message);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // ── Test 2: match:join → match:matched ───────────────────────────────────
@@ -212,7 +213,8 @@ async function main() {
       sockets.push(browser3.ws);
     } catch (err) {
       fail('browser3 authenticates', err.message);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // Send join then cancel without awaiting between — cancel must arrive before
@@ -269,7 +271,8 @@ async function main() {
       sockets.push(guestBrowser2.ws);
     } catch (err) {
       fail('guest browsers connect', err.message);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // Test 5: single guest match:join → match:rejected with reason guest_not_allowed.
@@ -325,10 +328,10 @@ async function main() {
   }
 
   console.log(`\n  ${passed} passed, ${failed} failed\n`);
-  process.exit(failed > 0 ? 1 : 0);
+  process.exitCode = failed > 0 ? 1 : 0;
 }
 
 main().catch((err) => {
   console.error(err);
-  process.exit(1);
+  process.exitCode = 1;
 });

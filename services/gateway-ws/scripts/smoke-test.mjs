@@ -87,15 +87,20 @@ async function testValidToken(token) {
   ws.send(JSON.stringify({ type: 'auth', payload: { token } }));
 
   let raw;
+  let timer;
   try {
     raw = await Promise.race([
       wsNextMessage(ws),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('timeout')), 3000);
+      }),
     ]);
   } catch (err) {
     fail('valid token → connected message', err.message);
     ws.terminate();
     return;
+  } finally {
+    clearTimeout(timer);
   }
 
   ws.close(1000);
@@ -147,7 +152,8 @@ async function main() {
   } catch (err) {
     console.error(`Could not obtain access token: ${err.message}`);
     console.error('Is the stack running? (make up + migrations applied)');
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   await testValidToken(token);
@@ -155,10 +161,10 @@ async function main() {
   await testNoAuth();
 
   console.log(`\n  ${passed} passed, ${failed} failed\n`);
-  process.exit(failed > 0 ? 1 : 0);
+  process.exitCode = failed > 0 ? 1 : 0;
 }
 
 main().catch((err) => {
   console.error(err);
-  process.exit(1);
+  process.exitCode = 1;
 });
