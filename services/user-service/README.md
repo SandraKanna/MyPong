@@ -51,13 +51,13 @@ user-service's WS client is receive-only. The only message it ever sends over th
 
 ## Healthcheck
 
-user-service's healthcheck is plain HTTP: `GET /health` on port 4002 returns `200 { status: 'ok' }` as long as the Fastify server is listening. The Docker healthcheck is:
+user-service's healthcheck is HTTP, but it reports two signals in one: `GET /health` on port 4002 returns `200 { status: 'ok', wsConnected: true }` only while both the Fastify server is listening **and** the internal WS client's connection to gateway-ws is open. If that WS connection is down, `/health` returns `503 { status: 'degraded', wsConnected: false }` — which makes the container's Docker healthcheck fail, since `wget` exits non-zero on any non-2xx response. The Docker healthcheck itself is unchanged:
 
 ```
 test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4002/health"]
 ```
 
-> **Healthcheck limitation:** this check only reflects whether the HTTP server is up — it says nothing about the WS client's connection to gateway-ws. Unlike game-service, match-service, and ai-bot-service (pure WS clients whose file-based healthcheck is tied directly to that connection), user-service never passes a `healthFilePath` to its `internalClient` — the HTTP and WS sides are entirely independent signals. A container can report `healthy` via the HTTP check while its gateway-ws connection is down (e.g. mid-backoff after gateway-ws restarts): in that state, `user:matchRecorded` events queue in `internalClient`'s in-memory outbox — or get silently dropped once that queue caps — without the healthcheck ever failing or anything else surfacing the problem (see Gotchas).
+The WS signal is included because a container that serves HTTP but has lost gateway-ws can't receive `user:matchRecorded` — stats silently stop updating (see Gotchas). The other WS-client services surface the same information through a health file (`test -f /tmp/healthy`) because they have no HTTP server; user-service does, so it reports it in-process instead. With `interval: 10s` / `retries: 5`, only a sustained outage (~1 min) flips the container to `unhealthy` — normal reconnect backoffs never reach the threshold, and recovery back to `healthy` is automatic once the client reconnects.
 
 ## Environment variables
 
@@ -143,4 +143,4 @@ Not applicable. `user_profiles`, `user_stats`, and `user_match_history` all carr
 
 ## Gotchas / known limitations
 
-- **Outbound WS messages are queued in memory while disconnected, not persisted.** `send()` buffers up to 50 pending messages and flushes them in order on reconnect — covering the common case (the 500ms–3s backoff window). High-frequency state broadcasts (`game:state`, `ai-bot:state`) are deliberately excluded from the queue, since a stale tick is superseded by the next one anyway. If the queue fills, the oldest pending message is dropped to make room, with a warning logged. None of this survives a process crash or restart — the queue is memory-only, by design. This is a separate concern from user-service's actual persistent storage: `DATABASE_URL` backs `user_profiles`, `user_stats`, and `user_match_history`, not this outbound message queue, which currently sits unused in practice since user-service never sends application-level WS messages (see Messages above).
+- **Outbound WS messages are queued in memory while disconnected, not persisted.** `send()` buffers up to 50 pending messages and flushes them in order on reconnect — covering the common case (the 500ms–3s backoff window). High-frequency state broadcasts (`game:state`, `ai-bot:state`) are deliberately excluded from the queue, since a stale tick is superseded by the next one anyway. If the queue fills, the oldest pending message is dropped to make room, with a warning logged. None of this survives a process crash or restart — the queue is memory-only, by design. This is a separate concern from user-service's actual persistent storage: `DATABASE_URL` backs `user_profiles`, `user_stats`, and `user_match_history`, not this outbound message queue, which currently sits unused in practice since user-service never sends application-level WS messages (see Messages above). A sustained disconnect is no longer invisible, though — `/health` reports it and the container goes `unhealthy` (see Healthcheck above); what remains accepted is the in-memory queue itself.

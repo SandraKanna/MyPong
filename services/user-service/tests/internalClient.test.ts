@@ -154,6 +154,48 @@ describe('internalClient — reconnects after disconnect', () => {
   });
 });
 
+describe('internalClient — isConnected()', () => {
+  let server: WebSocketServer;
+  let port: number;
+  let client: InternalClient;
+  let serverSocket: WebSocket;
+
+  beforeEach(async () => {
+    server = new WebSocketServer({ port: 0 });
+    await new Promise<void>((resolve) => { server.once('listening', resolve); });
+    port = (server.address() as { port: number }).port;
+  });
+
+  afterEach(async () => {
+    client.close();
+    await new Promise<void>((resolve) => { server.close(() => { resolve(); }); });
+  });
+
+  it('is true once connected and false after the connection drops', async () => {
+    const connected = new Promise<void>((resolve) => {
+      server.once('connection', (ws) => {
+        serverSocket = ws;
+        ws.once('message', () => { resolve(); }); // consume service:register
+      });
+    });
+
+    client = createInternalClient({
+      url: `ws://127.0.0.1:${port}`,
+      secret: 'x'.repeat(32),
+      serviceName: 'user-service',
+      initialRetryDelayMs: 50,
+    });
+
+    await connected;
+    expect(client.isConnected()).toBe(true);
+
+    serverSocket.close();
+    await vi.waitFor(() => {
+      expect(client.isConnected()).toBe(false);
+    }, { timeout: 1000, interval: 10 });
+  });
+});
+
 describe('internalClient — health file management', () => {
   let server: WebSocketServer;
   let port: number;
