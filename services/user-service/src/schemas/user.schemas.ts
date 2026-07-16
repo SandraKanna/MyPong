@@ -29,3 +29,32 @@ export const userLookupQuerySchema = z.object({
 });
 
 export type UserLookupQuery = z.infer<typeof userLookupQuerySchema>;
+
+// z.coerce.number() converts the raw string path param to a number before
+// validating (route params always arrive as strings). The { error } on the
+// base check covers non-numeric input ('abc' → NaN), which fails there
+// before .int()/.positive() ever run.
+export const idParamSchema = z.object({
+  id: z.coerce.number({ error: 'Invalid user id' }).int('Invalid user id').positive('Invalid user id'),
+});
+
+export type IdParam = z.infer<typeof idParamSchema>;
+
+// .default() fills in the value when the query param is absent. Every check
+// on a field carries the same message because the API contract returns a
+// single flat error string, not a per-check breakdown.
+export const matchesQuerySchema = z.object({
+  limit: z.coerce
+    .number({ error: 'limit must be a positive integer' })
+    .int('limit must be a positive integer')
+    .min(1, 'limit must be a positive integer')
+    .max(50, 'limit must not exceed 50')
+    .default(20),
+  offset: z.coerce
+    .number({ error: 'offset must be a non-negative integer' })
+    .int('offset must be a non-negative integer')
+    .min(0, 'offset must be a non-negative integer')
+    .default(0),
+});
+
+export type MatchesQuery = z.infer<typeof matchesQuerySchema>;

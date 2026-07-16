@@ -80,7 +80,13 @@ npm install # if you don't already have node_modules
 npm test
 ```
 
-5 files and 62 tests should pass.
+5 files and 63 tests should pass: the user routes (profile lifecycle, batch lookup, stats and match history with their Zod validation), avatar upload (magic-byte validation, size limit, re-encoding), `match.service` (`recordMatchResult()`'s transaction and idempotency guard), the `matchRecorded` handler, and the WS internal client.
+
+To list every test case individually instead of the per-file summary, run Vitest with the verbose reporter:
+
+```bash
+npx vitest run --reporter=verbose
+```
 
 ### Docker (full Compose stack)
 
