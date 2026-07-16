@@ -1,8 +1,10 @@
 import { useAuthStore } from '../../features/auth/state/authState';
 import type { IncomingMessage, OutgoingMessage } from './wsMessages';
 
-// STUDY: Module-level singleton — same pattern as httpClient.ts with its
-// refreshPromise. One socket shared by all callers; survives React re-renders.
+// STUDY: This module (file) is the single point of contact between the frontend and
+// the backend WS. The variable "socket" is a module-level singleton 
+// same pattern as httpClient.ts with its refreshPromise.
+// One socket shared by all callers; survives React re-renders.
 let socket: WebSocket | null = null;
 
 // gateway-ws closes a browser connection with this code when a newer login
@@ -36,9 +38,8 @@ let stopped        = false;
 let delay          = RECONNECT_INIT_MS;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-// STUDY: Constructs a same-origin WS URL so the path (/ws) is handled by
-// whoever is in front: Vite proxy (dev) or nginx reverse proxy (prod/docker).
-// Same reasoning as using relative paths in apiClient — no hardcoded host/port.
+// STUDY: Constructs dynamically a same-origin WS URL
+// same reasoning for using relative paths apiClient.ts
 function buildWsUrl(): string {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${proto}//${window.location.host}/ws`;
@@ -51,16 +52,34 @@ export function connectWs(): void {
   const token = useAuthStore.getState().accessToken;
   if (!token) return;
 
-  socket = new WebSocket(buildWsUrl());
+  // STUDY: "ws" is a local reference captured by this specific call's closures
+  // below (onopen/onmessage/onclose). Unlike the global "socket" variable,
+  // "ws" never changes for these handlers, even if React StrictMode's double-mount
+  // calls connectWs() again and reassigns "socket" to a newer instance.
+  // This lets each handler check "is the global socket still me?" before
+  // acting, so a stale instance from an earlier call doesn't interfere.
+  const ws = new WebSocket(buildWsUrl());
+  // STUDY: Update the global "socket" reference right after creating it,
+  // before attaching any handlers — sendWs()/disconnectWs() read the global
+  // "socket", so any code running between creation and this line would see
+  // a stale (or null) reference otherwise.
+  socket = ws;
 
-  socket.onopen = () => {
+  ws.onopen = () => {
+    if (socket !== ws) return;
     delay = RECONNECT_INIT_MS; // reset backoff on successful connect
     // First message must be the auth envelope — gateway-ws closes with 4001
     // if it times out waiting (5 s) or receives anything else first.
-    socket?.send(JSON.stringify({ type: 'auth', payload: { token } }));
+    ws.send(JSON.stringify({ type: 'auth', payload: { token } }));
   };
 
-  socket.onmessage = (event: MessageEvent<string>) => {
+  ws.onmessage = (event: MessageEvent<string>) => {
+    // STUDY: bail out if this instance was superseded by a newer connectWs()
+    // call (e.g. StrictMode's double-mount) — same reasoning as in onopen.
+    if (socket !== ws) {
+      return;
+    }
+
     let msg: unknown;
     try {
       msg = JSON.parse(event.data) as unknown;
@@ -78,7 +97,16 @@ export function connectWs(): void {
     }
   };
 
-  socket.onclose = (event: CloseEvent) => {
+  ws.onclose = (event: CloseEvent) => {
+    // STUDY: bail out BEFORE touching the global "socket" — if this instance
+    // was already superseded (socket !== ws), it means a newer connectWs()
+    // call already took over. Nulling "socket" here would wipe out that
+    // newer instance's reference, and reconnecting would fight it for the
+    // same userId (the original StrictMode double-mount bug).
+    if (socket !== ws) {
+      return;
+    }
+
     socket = null;
 
     if (event.code === CLOSE_SESSION_REPLACED) {
