@@ -50,6 +50,14 @@ nginx also requires a TLS certificate to start. Generate a self-signed one for l
 
 This is a one-time step (no-op if the certs already exist, `--force` to regenerate) — see [nginx's README](nginx/README.md#tls-certificates-local-dev) for what it generates (2048-bit RSA, `CN=localhost`, 365-day validity) and why it's needed. Without it, the `nginx` container fails to start: `nginx.conf` requires `nginx/certs/cert.pem` and `key.pem` to exist.
 
+> **macOS + Safari:** Safari validates certs against the system Keychain and won't accept an untrusted cert on a WebSocket, so `https://localhost` renders but the game stays stuck on "Connecting...". Trust the dev cert at the system level (one-time), then fully quit Safari (Cmd+Q) and reopen — a hard-refresh alone isn't enough, Safari only re-checks trust when the process restarts:
+>
+> ```bash
+> sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain nginx/certs/cert.pem
+> ```
+>
+> Re-run that (and quit/reopen again) after any `--force` regeneration. Firefox and Chrome use their own trust stores and aren't affected. More in [nginx's README](nginx/README.md#tls-certificates-local-dev).
+
 `make up` then starts the implemented stack — also applying all pending migrations automatically (`auth-service`, then `user-service`, then `match-service`, in that order since `user-service`'s tables have a foreign key into `auth-service`'s `users` table).
 
 ---

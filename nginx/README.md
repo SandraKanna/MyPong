@@ -38,7 +38,13 @@ This writes `nginx/certs/cert.pem` and `nginx/certs/key.pem` — a 2048-bit RSA 
 
 `nginx/certs/` is gitignored — certs are never committed. `docker-compose.yml` bind-mounts the directory read-only: `./nginx/certs:/etc/nginx/certs:ro`.
 
-Browsers will show a security warning for this self-signed cert. Accept it once per session, or configure your OS to trust it. `curl` requires `-k` / `--insecure`.
+Browsers will show a security warning for this self-signed cert. In Chrome and Firefox, accepting it once per session is enough. Safari on macOS is the exception: it validates against the system Keychain and won't accept an untrusted cert on a WebSocket, so the page loads but the game stays stuck on "Connecting..." with `wss://localhost/ws` failing in the console. Trust the cert at the system level (one-time), then fully quit Safari (Cmd+Q) and reopen — a hard-refresh alone won't do it, since Safari only re-checks trust on process restart:
+
+```bash
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain nginx/certs/cert.pem
+```
+
+Re-run that after any `--force` regeneration (the new cert isn't covered by the prior trust decision), and quit/reopen Safari again. `curl` requires `-k` / `--insecure`.
 
 ## Upstream resolver
 
