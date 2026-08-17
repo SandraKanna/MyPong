@@ -33,22 +33,31 @@ AI opponent and guest mode are fully implemented. Tournament mode — part of Tr
 - Make
 - Node.js 24 (only needed for the native dev setup in each service's README)
 
-Before running `make up` for the first time, create the root `.env`:
+## Quick start
 
+1. **Clone the repo**
+```bash
+git clone git@github.com:SandraKanna/MyPong.git && cd MyPong
+```
+2. **Create your `.env`** and fill in the secrets:
 ```bash
 cp .env.example .env
 ```
+Set `JWT_SECRET`, `JWT_REFRESH_SECRET`, `INTERNAL_SERVICE_SECRET` and `POSTGRES_PASSWORD`, then point `DATABASE_URL` at that same password. Every variable is documented inline in `.env.example`.
 
-Fill in `JWT_SECRET`, `JWT_REFRESH_SECRET`, `INTERNAL_SERVICE_SECRET` and `POSTGRES_PASSWORD` — then update
-`DATABASE_URL` to use that same password.
-
-nginx also requires a TLS certificate to start. Generate a self-signed one for local dev, from the repo root:
-
+3. **Generate the local TLS cert** (one-time, self-signed):
 ```bash
 ./scripts/generate-dev-cert.sh
 ```
+4. **Start the stack:**
+```bash
+make up
+```
+Builds the images, starts every service, and runs all migrations in dependency order (`auth-service`, then `user-service`, then `match-service`, since `user-service`'s tables have a foreign key into `auth-service`'s `users` table).
 
-This is a one-time step (no-op if the certs already exist, `--force` to regenerate) — see [nginx's README](nginx/README.md#tls-certificates-local-dev) for what it generates (2048-bit RSA, `CN=localhost`, 365-day validity) and why it's needed. Without it, the `nginx` container fails to start: `nginx.conf` requires `nginx/certs/cert.pem` and `key.pem` to exist.
+5. **Open `https://localhost`** and accept the certificate warning once.
+
+To play from another device on the same network, see [Playing over a local network](#playing-over-a-local-network).
 
 > **macOS + Safari:** Safari validates certs against the system Keychain and won't accept an untrusted cert on a WebSocket, so `https://localhost` renders but the game stays stuck on "Connecting...". Trust the dev cert at the system level (one-time), then fully quit Safari (Cmd+Q) and reopen — a hard-refresh alone isn't enough, Safari only re-checks trust when the process restarts:
 >
@@ -58,7 +67,21 @@ This is a one-time step (no-op if the certs already exist, `--force` to regenera
 >
 > Re-run that (and quit/reopen again) after any `--force` regeneration. Firefox and Chrome use their own trust stores and aren't affected. More in [nginx's README](nginx/README.md#tls-certificates-local-dev).
 
-`make up` then starts the implemented stack — also applying all pending migrations automatically (`auth-service`, then `user-service`, then `match-service`, in that order since `user-service`'s tables have a foreign key into `auth-service`'s `users` table).
+---
+
+## Playing over a local network
+
+Any device on the same network can play MyPong by pointing a browser at the host machine's LAN address, with no install and no per-device setup, on any OS. The stack is self-hosted and runs on a single machine; there is no public deployment.
+
+It works with zero configuration because the frontend reaches the backend only through relative paths (`/api/*`, `/ws`), so the app is same-origin whatever host serves it. nginx is the single entry point and its `443` port is reachable across the LAN, so hitting the host by IP resolves the full stack (REST, WebSocket, matchmaking) exactly as `localhost` does.
+
+To try it:
+
+1. Get the host's LAN IP (`ipconfig getifaddr en0` on macOS, `hostname -I` on Linux).
+2. From another device on the same WiFi, open `https://<that-ip>`.
+3. Accept the certificate warning once. The dev cert is issued for `localhost`, so browsers flag a name mismatch when you connect by IP; see [nginx's README](nginx/README.md#tls-certificates-local-dev) for trusting it properly.
+
+Two accounts on two machines can queue into the same FIFO match and play a real 1v1. If the other device can't reach the host, the cause is usually the host firewall blocking `443` or client isolation on the network (common on guest WiFi), not the stack.
 
 ---
 
